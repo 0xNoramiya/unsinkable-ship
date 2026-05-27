@@ -1,0 +1,5 @@
+node_modules/
+trailer/renders/
+*.mp4
+thumb-*.jpg
+package-lock.json

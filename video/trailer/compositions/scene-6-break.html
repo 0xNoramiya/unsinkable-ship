@@ -1,0 +1,214 @@
+<template id="scene-break-template">
+  <div data-composition-id="scene-break" data-width="1920" data-height="1080">
+    <div class="bg-fill"></div>
+    <div class="grid"></div>
+
+    <div class="dash">
+      <div class="header">
+        <div class="logo">🚢 UNSINKABLE — LIVE RESILIENCE</div>
+        <div class="status"><span class="dot ok"></span>connected</div>
+      </div>
+
+      <div id="banner" class="banner">⚠ CHAOS ACTIVE — openai :: resilient-chat → chaos-openai-down</div>
+
+      <div class="stats">
+        <div class="stat"><div class="num" id="b-total">1</div><div class="lbl">Requests</div></div>
+        <div class="stat"><div class="num ok" id="b-ok">1</div><div class="lbl">OK</div></div>
+        <div class="stat"><div class="num fb" id="b-fb">0</div><div class="lbl">Fallback</div></div>
+        <div class="stat"><div class="num err">0</div><div class="lbl">Error</div></div>
+      </div>
+
+      <div class="controls">
+        <button id="btn-openai" class="btn danger highlight">Break OpenAI</button>
+        <button class="btn danger">Break Anthropic</button>
+        <button class="btn danger">Cascade (both)</button>
+        <button class="btn danger">Break MCP primary</button>
+        <button class="btn warn">Brownout +3s</button>
+        <button class="btn ok">Clear chaos</button>
+      </div>
+
+      <div class="table">
+        <div class="thead">
+          <span>time</span><span>requested</span><span>resolved</span><span>status</span><span>latency</span>
+        </div>
+        <div class="row row-old">
+          <span class="t">21:43:01</span>
+          <span><span class="badge dim">resilient-chat/resilient-chat</span></span>
+          <span><span class="badge openai">gpt-4o-mini-2024-07-18</span></span>
+          <span><span class="pill ok">OK</span> <span class="dim">200</span></span>
+          <span class="dim">2174ms</span>
+        </div>
+        <div class="row row-new fb">
+          <span class="t">21:43:08</span>
+          <span><span class="badge dim">resilient-chat/resilient-chat</span> <span class="pill chaos">CHAOS</span></span>
+          <span><span class="badge anthropic">claude-sonnet-4-6</span></span>
+          <span><span class="pill fb">FALLBACK</span> <span class="dim">200</span></span>
+          <span class="dim">2733ms</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cursor pointer mock -->
+    <div id="cursor" class="cursor-mock">
+      <svg viewBox="0 0 24 24" width="36" height="36"><path d="M2 2 L2 16 L6 12 L9 19 L12 18 L9 11 L15 11 Z" fill="#fff" stroke="#000" stroke-width="1"/></svg>
+    </div>
+
+    <style>
+      [data-composition-id="scene-break"] {
+        position: absolute; inset: 0; overflow: hidden;
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        color: #d7e0ea; background: #0a0e14;
+      }
+      [data-composition-id="scene-break"] .bg-fill { position: absolute; inset: 0; background: #0a0e14; }
+      [data-composition-id="scene-break"] .grid {
+        position: absolute; inset: 0; opacity: 0.04;
+        background-image: linear-gradient(rgba(215,224,234,1) 1px, transparent 1px),
+                          linear-gradient(90deg, rgba(215,224,234,1) 1px, transparent 1px);
+        background-size: 96px 96px;
+      }
+      [data-composition-id="scene-break"] .dash {
+        position: absolute; top: 80px; left: 100px; right: 100px; bottom: 80px;
+        background: #10171f; border: 1px solid #1c2530; border-radius: 14px;
+        padding: 36px 40px; display: flex; flex-direction: column; gap: 20px;
+        box-shadow: 0 30px 100px rgba(0,0,0,0.6);
+      }
+      [data-composition-id="scene-break"] .header {
+        display: flex; justify-content: space-between; align-items: center;
+        padding-bottom: 18px; border-bottom: 1px solid #1c2530;
+      }
+      [data-composition-id="scene-break"] .logo { font-size: 28px; font-weight: 700; letter-spacing: 0.08em; }
+      [data-composition-id="scene-break"] .status { font-size: 18px; color: #7d8c9c; display: flex; align-items: center; gap: 10px; }
+      [data-composition-id="scene-break"] .dot { width: 10px; height: 10px; border-radius: 50%; background: #7fe0a3; box-shadow: 0 0 12px rgba(127,224,163,0.6); }
+      [data-composition-id="scene-break"] .banner {
+        background: #3a1e1e; color: #ffd0d0; border: 1px solid #5a2828;
+        padding: 16px 22px; border-radius: 8px; font-size: 22px; font-weight: 500;
+        opacity: 0;
+      }
+      [data-composition-id="scene-break"] .stats { display: flex; gap: 14px; }
+      [data-composition-id="scene-break"] .stat {
+        background: #0a0e14; border: 1px solid #1c2530; border-radius: 8px;
+        padding: 16px 22px; min-width: 140px;
+      }
+      [data-composition-id="scene-break"] .num { font-size: 40px; font-weight: 600; font-variant-numeric: tabular-nums; }
+      [data-composition-id="scene-break"] .num.ok { color: #7fe0a3; }
+      [data-composition-id="scene-break"] .num.fb { color: #f0c060; }
+      [data-composition-id="scene-break"] .num.err { color: #ff8a8a; }
+      [data-composition-id="scene-break"] .lbl {
+        color: #7d8c9c; font-size: 14px; text-transform: uppercase;
+        letter-spacing: 0.08em; margin-top: 4px;
+      }
+      [data-composition-id="scene-break"] .controls { display: flex; gap: 12px; flex-wrap: wrap; }
+      [data-composition-id="scene-break"] .btn {
+        background: #1a2733; color: #d7e0ea; border: 1px solid #2a3b4f;
+        padding: 12px 22px; border-radius: 6px; font: inherit; font-size: 18px;
+        cursor: default;
+      }
+      [data-composition-id="scene-break"] .btn.danger { background: #3a1e1e; border-color: #5a2828; color: #ffb0b0; }
+      [data-composition-id="scene-break"] .btn.warn   { background: #3a311e; border-color: #5a4828; color: #ffd070; }
+      [data-composition-id="scene-break"] .btn.ok     { background: #1e3a2a; border-color: #285a38; color: #9fe0a3; }
+      [data-composition-id="scene-break"] .btn.highlight { box-shadow: 0 0 0 0 rgba(255,107,107,0); }
+      [data-composition-id="scene-break"] .table {
+        background: #0a0e14; border: 1px solid #1c2530; border-radius: 8px;
+        padding: 0; flex: 1; overflow: hidden;
+      }
+      [data-composition-id="scene-break"] .thead {
+        display: grid; grid-template-columns: 130px 1fr 1fr 240px 130px;
+        padding: 14px 22px; color: #7d8c9c; font-size: 14px;
+        text-transform: uppercase; letter-spacing: 0.06em;
+        border-bottom: 1px solid #1c2530;
+      }
+      [data-composition-id="scene-break"] .row {
+        display: grid; grid-template-columns: 130px 1fr 1fr 240px 130px;
+        padding: 18px 22px; align-items: center; font-size: 22px;
+        border-bottom: 1px solid #1c2530;
+      }
+      [data-composition-id="scene-break"] .row.fb { background: rgba(240,192,96,0.08); }
+      [data-composition-id="scene-break"] .row .t { color: #7d8c9c; font-size: 16px; }
+      [data-composition-id="scene-break"] .badge {
+        display: inline-block; padding: 4px 12px; border-radius: 4px;
+        font-size: 18px; font-weight: 500; margin-right: 6px;
+      }
+      [data-composition-id="scene-break"] .badge.openai    { background: #0f3322; color: #7fe0a3; }
+      [data-composition-id="scene-break"] .badge.anthropic { background: #3a2a14; color: #f0a868; }
+      [data-composition-id="scene-break"] .badge.dim       { color: #7d8c9c; }
+      [data-composition-id="scene-break"] .pill {
+        display: inline-block; padding: 3px 12px; border-radius: 12px;
+        font-size: 14px; font-weight: 600;
+      }
+      [data-composition-id="scene-break"] .pill.ok    { background: #1e3a2a; color: #7fe0a3; }
+      [data-composition-id="scene-break"] .pill.fb    { background: #3a311e; color: #f0c060; }
+      [data-composition-id="scene-break"] .pill.chaos { background: #3a1e3a; color: #f0a0f0; }
+      [data-composition-id="scene-break"] .dim { color: #7d8c9c; font-size: 16px; }
+      [data-composition-id="scene-break"] .cursor-mock {
+        position: absolute; left: 1700px; top: 700px;
+        filter: drop-shadow(0 0 8px rgba(0,0,0,0.8));
+        pointer-events: none;
+      }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+
+      // start with banner + new row hidden + cursor offscreen
+      tl.set('[data-composition-id="scene-break"] .row-new', { opacity: 0 }, 0);
+
+      // initial state appears (no transition fade-in, this scene cuts in already showing dashboard)
+      tl.from('[data-composition-id="scene-break"] .dash',
+        { opacity: 0, scale: 0.98, duration: 0.4, ease: "power2.out" }, 0);
+
+      // cursor sweeps from right-center → break-openai button
+      // button is at top-left of controls; approximate position (160, 290)
+      tl.fromTo('[data-composition-id="scene-break"] #cursor',
+        { left: 1700, top: 740, opacity: 0 },
+        { opacity: 1, duration: 0.3 }, 0.4);
+      tl.to('[data-composition-id="scene-break"] #cursor',
+        { left: 280, top: 460, duration: 1.6, ease: "power2.inOut" }, 0.8);
+
+      // click! button flashes + scales down briefly
+      tl.to('[data-composition-id="scene-break"] #btn-openai',
+        { scale: 0.92, duration: 0.12, ease: "power2.in" }, 2.4);
+      tl.to('[data-composition-id="scene-break"] #btn-openai',
+        { scale: 1, boxShadow: "0 0 40px 8px rgba(255,107,107,0.5)", duration: 0.35, ease: "power3.out" }, 2.52);
+      tl.to('[data-composition-id="scene-break"] #btn-openai',
+        { boxShadow: "0 0 0 0 rgba(255,107,107,0)", duration: 1.2, ease: "power2.out" }, 2.87);
+
+      // banner slides down
+      tl.fromTo('[data-composition-id="scene-break"] #banner',
+        { opacity: 0, y: -20 },
+        { opacity: 1, y: 0, duration: 0.45, ease: "expo.out" }, 2.7);
+
+      // cursor retreats
+      tl.to('[data-composition-id="scene-break"] #cursor',
+        { left: 1700, top: 800, opacity: 0, duration: 0.6, ease: "power2.inOut" }, 3.2);
+
+      // new row drops in (FALLBACK)
+      tl.to('[data-composition-id="scene-break"] .row-new',
+        { opacity: 1, duration: 0.5, ease: "power3.out" }, 4.0);
+      tl.fromTo('[data-composition-id="scene-break"] .row-new',
+        { y: -18 }, { y: 0, duration: 0.45, ease: "expo.out" }, 4.0);
+
+      // stats tick
+      tl.to({n: 1}, {
+        n: 2, duration: 0.35, ease: "power2.out",
+        onUpdate: function () {
+          const v = Math.round(this.targets()[0].n);
+          document.getElementById("b-total").textContent = v;
+        }
+      }, 4.4);
+      tl.to({n: 0}, {
+        n: 1, duration: 0.35, ease: "power2.out",
+        onUpdate: function () {
+          document.getElementById("b-fb").textContent = Math.round(this.targets()[0].n);
+        }
+      }, 4.4);
+
+      // banner pulses subtly
+      tl.to('[data-composition-id="scene-break"] #banner',
+        { boxShadow: "inset 0 0 30px rgba(255,107,107,0.3)", duration: 1.5, yoyo: true, repeat: 4, ease: "sine.inOut" }, 5.5);
+
+      window.__timelines["scene-break"] = tl;
+    </script>
+  </div>
+</template>

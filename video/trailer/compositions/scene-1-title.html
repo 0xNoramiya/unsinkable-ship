@@ -1,0 +1,71 @@
+<template id="scene-title-template">
+  <div data-composition-id="scene-title" data-width="1920" data-height="1080">
+    <div class="bg-fill"></div>
+    <div class="glow"></div>
+    <div class="grid"></div>
+
+    <div class="center">
+      <div class="ship">🚢</div>
+      <h1 class="title">
+        <span class="char">U</span><span class="char">N</span><span class="char">S</span><span class="char">I</span><span class="char">N</span><span class="char">K</span><span class="char">A</span><span class="char">B</span><span class="char">L</span><span class="char">E</span>
+      </h1>
+      <div class="tagline">RESILIENT&nbsp;&nbsp;AGENTS&nbsp;·&nbsp;TRUEFOUNDRY&nbsp;AI&nbsp;GATEWAY</div>
+      <div class="cursor"></div>
+    </div>
+
+    <style>
+      [data-composition-id="scene-title"] {
+        position: absolute; inset: 0; overflow: hidden;
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        color: #d7e0ea;
+      }
+      [data-composition-id="scene-title"] .bg-fill { position: absolute; inset: 0; background: #0a0e14; }
+      [data-composition-id="scene-title"] .glow {
+        position: absolute; inset: 0;
+        background: radial-gradient(circle at 50% 55%, rgba(240,168,104,0.18), rgba(10,14,20,0) 60%);
+      }
+      [data-composition-id="scene-title"] .grid {
+        position: absolute; inset: 0; opacity: 0.05;
+        background-image: linear-gradient(rgba(215,224,234,1) 1px, transparent 1px),
+                          linear-gradient(90deg, rgba(215,224,234,1) 1px, transparent 1px);
+        background-size: 96px 96px;
+      }
+      [data-composition-id="scene-title"] .center {
+        position: absolute; inset: 0; display: flex; flex-direction: column;
+        align-items: center; justify-content: center; padding: 0 200px;
+      }
+      [data-composition-id="scene-title"] .ship {
+        font-size: 200px; line-height: 1; margin-bottom: 28px;
+        filter: drop-shadow(0 0 60px rgba(240,168,104,0.4));
+      }
+      [data-composition-id="scene-title"] .title {
+        font-size: 200px; font-weight: 800; letter-spacing: -0.06em;
+        line-height: 0.9; display: flex; gap: 0;
+      }
+      [data-composition-id="scene-title"] .char { display: inline-block; }
+      [data-composition-id="scene-title"] .tagline {
+        margin-top: 44px; font-size: 32px; letter-spacing: 0.32em;
+        font-weight: 300; color: #7d8c9c;
+      }
+      [data-composition-id="scene-title"] .cursor {
+        width: 18px; height: 44px; background: #f0a868; margin-top: 36px;
+      }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+      tl.from('[data-composition-id="scene-title"] .ship', { scale: 0.6, opacity: 0, duration: 0.8, ease: "expo.out" }, 0.2);
+      tl.from('[data-composition-id="scene-title"] .char', { y: 100, opacity: 0, duration: 0.55, stagger: 0.045, ease: "power3.out" }, 0.55);
+      tl.from('[data-composition-id="scene-title"] .tagline', { y: 26, opacity: 0, duration: 0.6, ease: "power2.out" }, 1.7);
+      tl.fromTo('[data-composition-id="scene-title"] .cursor',
+        { opacity: 0 }, { opacity: 1, duration: 0.2 }, 2.1);
+      tl.to('[data-composition-id="scene-title"] .cursor',
+        { opacity: 0.1, duration: 0.5, repeat: 6, yoyo: true, ease: "steps(1)" }, 2.4);
+      tl.to('[data-composition-id="scene-title"] .glow',
+        { opacity: 1.35, duration: 3, yoyo: true, repeat: 1, ease: "sine.inOut" }, 0);
+      window.__timelines["scene-title"] = tl;
+    </script>
+  </div>
+</template>

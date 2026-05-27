@@ -1,0 +1,158 @@
+<template id="scene-mcp-template">
+  <div data-composition-id="scene-mcp" data-width="1920" data-height="1080">
+    <div class="bg-fill"></div>
+    <div class="grid"></div>
+
+    <div class="dash">
+      <div class="header">
+        <div class="logo">🚢 UNSINKABLE — LIVE RESILIENCE</div>
+        <div class="subtitle">TOOL LAYER TOO.</div>
+      </div>
+
+      <div id="banner" class="banner">⚠ MCP CHAOS — primary search server down · client failed over</div>
+
+      <div class="table">
+        <div class="thead">
+          <span>kind</span><span>backend</span><span>tool</span><span>status</span><span>latency</span>
+        </div>
+        <div class="row row-1 fb">
+          <span><span class="kind mcp">MCP</span></span>
+          <span><span class="badge primary skipped">primary</span> <span class="dim">— skipped (chaos)</span></span>
+          <span class="dim">web_search</span>
+          <span><span class="pill skip">SKIPPED</span></span>
+          <span class="dim">—</span>
+        </div>
+        <div class="row row-2 ok">
+          <span><span class="kind mcp">MCP</span></span>
+          <span><span class="badge secondary">secondary</span></span>
+          <span class="dim">web_search</span>
+          <span><span class="pill ok">OK</span> <span class="dim">200</span></span>
+          <span class="dim">15ms</span>
+        </div>
+        <div class="row row-3 result">
+          <span class="dim">→</span>
+          <span colspan="4" class="result-text">"Backup results for 'Rust 1.80 release notes':"</span>
+        </div>
+      </div>
+
+      <div class="footer-tag">Same chaos engine. Same playbook. Tools fall back too.</div>
+    </div>
+
+    <style>
+      [data-composition-id="scene-mcp"] {
+        position: absolute; inset: 0; overflow: hidden;
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        color: #d7e0ea; background: #0a0e14;
+      }
+      [data-composition-id="scene-mcp"] .bg-fill { position: absolute; inset: 0; background: #0a0e14; }
+      [data-composition-id="scene-mcp"] .grid {
+        position: absolute; inset: 0; opacity: 0.04;
+        background-image: linear-gradient(rgba(215,224,234,1) 1px, transparent 1px),
+                          linear-gradient(90deg, rgba(215,224,234,1) 1px, transparent 1px);
+        background-size: 96px 96px;
+      }
+      [data-composition-id="scene-mcp"] .dash {
+        position: absolute; top: 100px; left: 100px; right: 100px; bottom: 100px;
+        background: #10171f; border: 1px solid #1c2530; border-radius: 14px;
+        padding: 40px; display: flex; flex-direction: column; gap: 24px;
+        box-shadow: 0 30px 100px rgba(0,0,0,0.6);
+      }
+      [data-composition-id="scene-mcp"] .header {
+        display: flex; justify-content: space-between; align-items: baseline;
+        padding-bottom: 18px; border-bottom: 1px solid #1c2530;
+      }
+      [data-composition-id="scene-mcp"] .logo { font-size: 30px; font-weight: 700; letter-spacing: 0.08em; }
+      [data-composition-id="scene-mcp"] .subtitle {
+        font-size: 22px; letter-spacing: 0.34em; color: #c8a8f0; font-weight: 600;
+      }
+      [data-composition-id="scene-mcp"] .banner {
+        background: #2a1e3a; color: #f0d0ff; border: 1px solid #4a2858;
+        padding: 18px 24px; border-radius: 8px; font-size: 24px; font-weight: 500;
+        opacity: 0;
+      }
+      [data-composition-id="scene-mcp"] .table {
+        background: #0a0e14; border: 1px solid #1c2530; border-radius: 8px;
+        padding: 0; flex: 1; overflow: hidden;
+      }
+      [data-composition-id="scene-mcp"] .thead {
+        display: grid; grid-template-columns: 120px 1fr 220px 200px 120px;
+        padding: 16px 22px; color: #7d8c9c; font-size: 16px;
+        text-transform: uppercase; letter-spacing: 0.06em;
+        border-bottom: 1px solid #1c2530;
+      }
+      [data-composition-id="scene-mcp"] .row {
+        display: grid; grid-template-columns: 120px 1fr 220px 200px 120px;
+        padding: 22px; align-items: center; font-size: 24px;
+        border-bottom: 1px solid #1c2530;
+      }
+      [data-composition-id="scene-mcp"] .row.fb { background: rgba(200,168,240,0.06); }
+      [data-composition-id="scene-mcp"] .row.ok { background: rgba(127,224,163,0.08); }
+      [data-composition-id="scene-mcp"] .row.result { display: flex; gap: 18px; }
+      [data-composition-id="scene-mcp"] .result-text { color: #7fe0a3; font-size: 22px; }
+      [data-composition-id="scene-mcp"] .kind {
+        display: inline-block; padding: 4px 14px; border-radius: 4px;
+        font-size: 14px; font-weight: 700; letter-spacing: 0.1em;
+      }
+      [data-composition-id="scene-mcp"] .kind.mcp { background: #2a1e3a; color: #c8a8f0; }
+      [data-composition-id="scene-mcp"] .badge {
+        display: inline-block; padding: 4px 12px; border-radius: 4px;
+        font-size: 18px; font-weight: 500;
+      }
+      [data-composition-id="scene-mcp"] .badge.primary   { background: #2a1e3a; color: #c8a8f0; }
+      [data-composition-id="scene-mcp"] .badge.primary.skipped { text-decoration: line-through; opacity: 0.5; }
+      [data-composition-id="scene-mcp"] .badge.secondary { background: #2a1e3a; color: #c8a8f0; }
+      [data-composition-id="scene-mcp"] .pill {
+        display: inline-block; padding: 3px 12px; border-radius: 12px;
+        font-size: 14px; font-weight: 600;
+      }
+      [data-composition-id="scene-mcp"] .pill.ok   { background: #1e3a2a; color: #7fe0a3; }
+      [data-composition-id="scene-mcp"] .pill.skip { background: #2a1e3a; color: #f0a0f0; }
+      [data-composition-id="scene-mcp"] .dim { color: #7d8c9c; font-size: 18px; }
+      [data-composition-id="scene-mcp"] .footer-tag {
+        text-align: center; font-size: 22px; color: #7d8c9c; letter-spacing: 0.06em;
+        padding-top: 8px;
+      }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+
+      tl.from('[data-composition-id="scene-mcp"] .dash',
+        { y: 30, opacity: 0, duration: 0.5, ease: "expo.out" }, 0);
+      tl.from('[data-composition-id="scene-mcp"] .logo',
+        { x: -20, opacity: 0, duration: 0.45, ease: "power2.out" }, 0.3);
+      tl.from('[data-composition-id="scene-mcp"] .subtitle',
+        { x: 20, opacity: 0, duration: 0.45, ease: "power2.out" }, 0.4);
+      tl.fromTo('[data-composition-id="scene-mcp"] #banner',
+        { opacity: 0, y: -16 }, { opacity: 1, y: 0, duration: 0.5, ease: "expo.out" }, 0.7);
+      tl.from('[data-composition-id="scene-mcp"] .thead',
+        { opacity: 0, duration: 0.3 }, 1.1);
+
+      // primary row (skipped)
+      tl.from('[data-composition-id="scene-mcp"] .row-1',
+        { y: -16, opacity: 0, duration: 0.45, ease: "power3.out" }, 1.5);
+
+      // secondary row (answers)
+      tl.from('[data-composition-id="scene-mcp"] .row-2',
+        { y: -16, opacity: 0, duration: 0.45, ease: "power3.out" }, 2.6);
+      tl.from('[data-composition-id="scene-mcp"] .row-2 .pill.ok',
+        { scale: 0.6, duration: 0.45, ease: "back.out(2)" }, 2.9);
+
+      // result text
+      tl.from('[data-composition-id="scene-mcp"] .row-3',
+        { y: -10, opacity: 0, duration: 0.4, ease: "power2.out" }, 3.7);
+
+      // footer tag
+      tl.from('[data-composition-id="scene-mcp"] .footer-tag',
+        { opacity: 0, y: 14, duration: 0.5, ease: "power2.out" }, 4.6);
+
+      // ambient purple pulse on banner
+      tl.to('[data-composition-id="scene-mcp"] #banner',
+        { boxShadow: "0 0 40px rgba(200,168,240,0.3)", duration: 1.5, yoyo: true, repeat: 2, ease: "sine.inOut" }, 5);
+
+      window.__timelines["scene-mcp"] = tl;
+    </script>
+  </div>
+</template>

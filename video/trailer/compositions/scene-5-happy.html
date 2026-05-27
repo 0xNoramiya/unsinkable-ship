@@ -1,0 +1,179 @@
+<template id="scene-happy-template">
+  <div data-composition-id="scene-happy" data-width="1920" data-height="1080">
+    <div class="bg-fill"></div>
+    <div class="grid"></div>
+
+    <div class="dash">
+      <!-- header -->
+      <div class="header">
+        <div class="logo">🚢 UNSINKABLE — LIVE RESILIENCE</div>
+        <div class="status"><span class="dot ok"></span>connected</div>
+      </div>
+
+      <!-- stats row -->
+      <div class="stats">
+        <div class="stat"><div class="num" id="s-total">0</div><div class="lbl">Requests</div></div>
+        <div class="stat"><div class="num ok" id="s-ok">0</div><div class="lbl">OK</div></div>
+        <div class="stat"><div class="num fb" id="s-fb">0</div><div class="lbl">Fallback</div></div>
+        <div class="stat"><div class="num err">0</div><div class="lbl">Error</div></div>
+        <div class="stat wide"><svg class="spark" viewBox="0 0 240 48" preserveAspectRatio="none"><polyline points="" /></svg><div class="lbl">Latency (last 30)</div></div>
+      </div>
+
+      <!-- chaos controls (inert in this scene) -->
+      <div class="controls">
+        <button class="btn danger">Break OpenAI</button>
+        <button class="btn danger">Break Anthropic</button>
+        <button class="btn danger">Cascade (both)</button>
+        <button class="btn danger">Break MCP primary</button>
+        <button class="btn warn">Brownout +3s</button>
+        <button class="btn ok">Clear chaos</button>
+      </div>
+
+      <!-- event table -->
+      <div class="table">
+        <div class="thead">
+          <span>time</span><span>requested</span><span>resolved</span><span>status</span><span>latency</span>
+        </div>
+        <div class="row row-1">
+          <span class="t">21:43:01</span>
+          <span><span class="badge dim">resilient-chat/resilient-chat</span></span>
+          <span><span class="badge openai">gpt-4o-mini-2024-07-18</span></span>
+          <span><span class="pill ok">OK</span> <span class="dim">200</span></span>
+          <span class="dim">2174ms</span>
+        </div>
+      </div>
+    </div>
+
+    <style>
+      [data-composition-id="scene-happy"] {
+        position: absolute; inset: 0; overflow: hidden;
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        color: #d7e0ea; background: #0a0e14;
+      }
+      [data-composition-id="scene-happy"] .bg-fill { position: absolute; inset: 0; background: #0a0e14; }
+      [data-composition-id="scene-happy"] .grid {
+        position: absolute; inset: 0; opacity: 0.04;
+        background-image: linear-gradient(rgba(215,224,234,1) 1px, transparent 1px),
+                          linear-gradient(90deg, rgba(215,224,234,1) 1px, transparent 1px);
+        background-size: 96px 96px;
+      }
+      [data-composition-id="scene-happy"] .dash {
+        position: absolute; top: 80px; left: 100px; right: 100px; bottom: 80px;
+        background: #10171f; border: 1px solid #1c2530; border-radius: 14px;
+        padding: 36px 40px; display: flex; flex-direction: column; gap: 24px;
+        box-shadow: 0 30px 100px rgba(0,0,0,0.6);
+      }
+      [data-composition-id="scene-happy"] .header {
+        display: flex; justify-content: space-between; align-items: center;
+        padding-bottom: 18px; border-bottom: 1px solid #1c2530;
+      }
+      [data-composition-id="scene-happy"] .logo { font-size: 28px; font-weight: 700; letter-spacing: 0.08em; }
+      [data-composition-id="scene-happy"] .status { font-size: 18px; color: #7d8c9c; display: flex; align-items: center; gap: 10px; }
+      [data-composition-id="scene-happy"] .dot { width: 10px; height: 10px; border-radius: 50%; background: #7fe0a3; box-shadow: 0 0 12px rgba(127,224,163,0.6); }
+      [data-composition-id="scene-happy"] .stats { display: flex; gap: 14px; }
+      [data-composition-id="scene-happy"] .stat {
+        background: #0a0e14; border: 1px solid #1c2530; border-radius: 8px;
+        padding: 16px 22px; min-width: 140px;
+      }
+      [data-composition-id="scene-happy"] .stat.wide { flex: 1; min-width: 260px; }
+      [data-composition-id="scene-happy"] .num { font-size: 40px; font-weight: 600; font-variant-numeric: tabular-nums; }
+      [data-composition-id="scene-happy"] .num.ok { color: #7fe0a3; }
+      [data-composition-id="scene-happy"] .num.fb { color: #f0c060; }
+      [data-composition-id="scene-happy"] .num.err { color: #ff8a8a; }
+      [data-composition-id="scene-happy"] .lbl {
+        color: #7d8c9c; font-size: 14px; text-transform: uppercase;
+        letter-spacing: 0.08em; margin-top: 4px;
+      }
+      [data-composition-id="scene-happy"] .spark { width: 100%; height: 56px; display: block; }
+      [data-composition-id="scene-happy"] .spark polyline { fill: rgba(127,200,224,0.18); stroke: #7fc8e0; stroke-width: 2; }
+      [data-composition-id="scene-happy"] .controls { display: flex; gap: 12px; flex-wrap: wrap; }
+      [data-composition-id="scene-happy"] .btn {
+        background: #1a2733; color: #d7e0ea; border: 1px solid #2a3b4f;
+        padding: 12px 22px; border-radius: 6px; font: inherit; font-size: 18px;
+        cursor: default;
+      }
+      [data-composition-id="scene-happy"] .btn.danger { background: #3a1e1e; border-color: #5a2828; color: #ffb0b0; }
+      [data-composition-id="scene-happy"] .btn.warn   { background: #3a311e; border-color: #5a4828; color: #ffd070; }
+      [data-composition-id="scene-happy"] .btn.ok     { background: #1e3a2a; border-color: #285a38; color: #9fe0a3; }
+      [data-composition-id="scene-happy"] .table {
+        background: #0a0e14; border: 1px solid #1c2530; border-radius: 8px;
+        padding: 0; flex: 1; overflow: hidden;
+      }
+      [data-composition-id="scene-happy"] .thead {
+        display: grid; grid-template-columns: 130px 1fr 1fr 220px 130px;
+        padding: 14px 22px; color: #7d8c9c; font-size: 14px;
+        text-transform: uppercase; letter-spacing: 0.06em;
+        border-bottom: 1px solid #1c2530;
+      }
+      [data-composition-id="scene-happy"] .row {
+        display: grid; grid-template-columns: 130px 1fr 1fr 220px 130px;
+        padding: 18px 22px; align-items: center; font-size: 22px;
+        border-bottom: 1px solid #1c2530;
+      }
+      [data-composition-id="scene-happy"] .row .t { color: #7d8c9c; font-size: 16px; }
+      [data-composition-id="scene-happy"] .badge {
+        display: inline-block; padding: 4px 12px; border-radius: 4px;
+        font-size: 18px; font-weight: 500;
+      }
+      [data-composition-id="scene-happy"] .badge.openai    { background: #0f3322; color: #7fe0a3; }
+      [data-composition-id="scene-happy"] .badge.dim       { color: #7d8c9c; }
+      [data-composition-id="scene-happy"] .pill {
+        display: inline-block; padding: 3px 12px; border-radius: 12px;
+        font-size: 14px; font-weight: 600;
+      }
+      [data-composition-id="scene-happy"] .pill.ok { background: #1e3a2a; color: #7fe0a3; }
+      [data-composition-id="scene-happy"] .dim { color: #7d8c9c; font-size: 16px; }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+
+      // dash + chrome in
+      tl.from('[data-composition-id="scene-happy"] .dash',
+        { y: 30, opacity: 0, duration: 0.6, ease: "expo.out" }, 0.1);
+      tl.from('[data-composition-id="scene-happy"] .header > *',
+        { y: -10, opacity: 0, duration: 0.4, stagger: 0.08, ease: "power2.out" }, 0.5);
+      tl.from('[data-composition-id="scene-happy"] .stat',
+        { y: 20, opacity: 0, duration: 0.45, stagger: 0.08, ease: "power3.out" }, 0.7);
+      tl.from('[data-composition-id="scene-happy"] .btn',
+        { y: 14, opacity: 0, duration: 0.35, stagger: 0.06, ease: "power2.out" }, 1.1);
+      tl.from('[data-composition-id="scene-happy"] .thead',
+        { opacity: 0, duration: 0.4 }, 1.6);
+
+      // first call lands
+      tl.fromTo('[data-composition-id="scene-happy"] .row-1',
+        { opacity: 0, y: -14 },
+        { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, 3.0);
+
+      // stat counter ticks up
+      tl.to({n: 0}, {
+        n: 1, duration: 0.4, ease: "power2.out",
+        onUpdate: function () {
+          const v = Math.round(this.targets()[0].n);
+          document.getElementById("s-total").textContent = v;
+          document.getElementById("s-ok").textContent = v;
+        }
+      }, 3.4);
+
+      // sparkline draws in
+      const points = [];
+      const spark = document.querySelector('[data-composition-id="scene-happy"] .spark polyline');
+      for (let i = 0; i < 30; i++) {
+        const x = (i / 29) * 240;
+        const y = 36 - Math.sin(i * 0.6) * 6 - (i % 5) * 1.5;
+        points.push(x + "," + y);
+      }
+      tl.call(function () { spark.setAttribute("points", points.join(" ")); }, null, 4.2);
+      tl.fromTo('[data-composition-id="scene-happy"] .spark',
+        { opacity: 0 }, { opacity: 1, duration: 0.5 }, 4.2);
+
+      // ambient breathe on connected dot
+      tl.to('[data-composition-id="scene-happy"] .status .dot',
+        { opacity: 0.55, scale: 1.15, duration: 1.4, yoyo: true, repeat: 5, ease: "sine.inOut" }, 0);
+
+      window.__timelines["scene-happy"] = tl;
+    </script>
+  </div>
+</template>
