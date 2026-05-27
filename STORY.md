@@ -4,30 +4,35 @@
 
 Production LLM applications are routinely one provider outage away from a status-page incident. We have all read the same retro: OpenAI brown-outs, the agent surfaces a 5xx, customer support lights up. Anthropic rate-limits the next morning, same story. The infrastructure to avoid this already exists — [TrueFoundry's AI Gateway](https://www.truefoundry.com/docs/ai-gateway/intro-to-llm-gateway) ships priority-based routing, retries, virtual models, observability, even a Virtual MCP Server for tool resilience.
 
-What was missing was the on-ramp. To benefit from the gateway you had to change `base_url`, swap auth, refactor request shapes, configure routing YAML, then build something to *prove* your new fallback chain actually fires under load. None of that is hard, but none of it is free either, and the sum is enough activation energy to keep most teams on raw `openai.OpenAI(api_key=...)` until the day production teaches them otherwise.
+What was missing was the on-ramp. To benefit from the gateway you had to change `base_url`, swap auth, refactor request shapes, configure routing YAML, and then build something to *prove* your new fallback chain actually fires under load. None of that is hard, but none of it is free either, and the sum is enough activation energy to keep most teams on raw `openai.OpenAI(api_key=...)` until the day production teaches them otherwise.
 
 We wanted to collapse that activation energy to two lines of code, and pair it with a chaos engine and live observability so resilience could be demonstrated — not just promised — before shipping.
 
 ## What it does
 
-`unsinkable` is a Python package that wires any OpenAI-SDK-compatible app to TrueFoundry's AI Gateway in two lines:
+`unsinkable` is a Python package, published on [PyPI](https://pypi.org/project/unsinkable/), that wires any OpenAI- or Anthropic-SDK-compatible app to TrueFoundry's AI Gateway in two lines:
 
 ```python
 from unsinkable import OpenAI
 client = OpenAI()
 ```
 
-The shim subclasses `openai.OpenAI` (and `openai.AsyncOpenAI`), injects the gateway base URL and authentication from environment variables, and installs an instrumented `httpx` transport. Every `chat.completions.create`, embedding, streamed response, or tool-call request now flows through TrueFoundry's gateway with priority fallback (OpenAI → Anthropic → Gemini, or whatever chain you configure).
+The shim subclasses `openai.OpenAI` (and `openai.AsyncOpenAI`), injects the gateway base URL and authentication from environment variables, and installs an instrumented `httpx` transport. Every `chat.completions.create`, embedding, streamed response, or tool-call request now flows through TrueFoundry's gateway with priority-based fallback (OpenAI → Anthropic → Gemini, or whatever chain you configure).
 
-The package also ships:
+The package ships eight surfaces:
 
-- **`unsinkable chaos {break,brownout,clear,status}`** — a CLI that toggles fault scenarios shared between the shim and any running agent via a temp-file state store.
-- **`unsinkable dashboard`** — a FastAPI + Server-Sent-Events server that streams live request events to a browser UI with provider-color-coded badges, latency sparkline, token counter, and in-page chaos controls.
-- **`unsinkable demo`** — a scripted fourteen-step resilience tour (happy path → break OpenAI → brownout → cascade → MCP failover → recovery) that runs end-to-end in about forty-five seconds.
-- **`unsinkable.mcp.ResilientMcpClient`** — a client-side analogue of Virtual MCP Server that wraps multiple MCP backends and fails over between them per tool call, consulting the same chaos state.
-- **A live Vercel demo** at <https://web-demo-ebon-iota.vercel.app/> so judges can play with the dashboard without installing anything.
+| Surface | What it provides |
+| --- | --- |
+| `unsinkable.OpenAI` / `AsyncOpenAI` | Drop-in subclass that preserves the full `openai-python` API while routing through the gateway. |
+| `unsinkable.Anthropic` / `AsyncAnthropic` | Drop-in for `anthropic.Anthropic`. Translates the Messages API to OpenAI Chat Completions in flight so the gateway sees a uniform shape. |
+| `unsinkable.mcp.ResilientMcpClient` | Client-side analogue of TF's Virtual MCP Server. Wraps multiple MCP backends — local stdio subprocesses *or* remote Streamable-HTTP endpoints — and fails over per tool call. |
+| `unsinkable dashboard` | Local FastAPI + SSE server with in-page chaos controls, latency sparkline, p50/p95/p99 percentiles, token counter, and provider-color-coded badges. |
+| `unsinkable chaos {break,brownout,clear,status}` | Six scenarios — `openai`, `anthropic`, `cascade`, `rate-limit`, `truncate`, `mcp-{primary,secondary,all}` — that produce real gateway-side fallback by swapping the outgoing model name to a pre-broken Virtual Model. |
+| `unsinkable wire <target> [--dry-run]` | AST codemod (libcst) that rewrites `from openai import ...` and `from anthropic import ...` to `from unsinkable import ...` across an entire project. Whitespace and comments preserved. |
+| `unsinkable demo` | Scripted 14-step resilience tour (~45 s) covering LLM fallback, brownouts, three-hop cascade outages, and MCP failover. |
+| OpenTelemetry exporter | Set `OTEL_EXPORTER_OTLP_ENDPOINT` and every request event is emitted as a span alongside the dashboard. Optional install: `pip install unsinkable[otel]`. |
 
-The package is published on PyPI as [`unsinkable`](https://pypi.org/project/unsinkable/) — `pip install unsinkable` works in a clean venv today.
+A production guardrail (`UNSINKABLE_DISABLE_CHAOS=1`) hard-disables the chaos engine even if a stale state file is present, so a developer-laptop scenario can never affect a deployed app. A [live Vercel demo](https://web-demo-ebon-iota.vercel.app/) lets visitors play with the dashboard without installing anything.
 
 ## How we built it
 
@@ -55,26 +60,30 @@ class _InstrumentedSyncTransport(httpx.HTTPTransport):
         return response
 ```
 
-**The chaos engine** (`src/unsinkable/chaos.py`) persists state as a single JSON file at `/tmp/unsinkable-chaos.json` so the CLI and any agent processes consulting the shim see a consistent view without an IPC layer. Each named scenario maps an "original" Virtual Model name to a "chaos" variant:
+**The chaos engine** (`src/unsinkable/chaos.py`) persists state as a single JSON file at `/tmp/unsinkable-chaos.json` so the CLI and any agent processes consulting the shim see a consistent view without an IPC layer. Each named scenario maps an "original" Virtual Model name to a "chaos" variant — or, for body-override scenarios like `truncate`, mutates the request payload directly:
 
 ```python
 SCENARIOS = {
-    "openai":    {"resilient-chat/resilient-chat": "chaos-openai-down/chaos-openai-down"},
-    "anthropic": {"resilient-chat/resilient-chat": "chaos-anthropic-down/chaos-anthropic-down"},
-    "cascade":   {"resilient-chat/resilient-chat": "chaos-cascade/chaos-cascade"},
+    "openai":     {"resilient-chat/resilient-chat": "chaos-openai-down/chaos-openai-down"},
+    "anthropic":  {"resilient-chat/resilient-chat": "chaos-anthropic-down/chaos-anthropic-down"},
+    "cascade":    {"resilient-chat/resilient-chat": "chaos-cascade/chaos-cascade"},
+    "rate-limit": {"resilient-chat/resilient-chat": "chaos-rate-limit/chaos-rate-limit"},
+}
+BODY_OVERRIDE_SCENARIOS = {
+    "truncate": {"max_tokens": 1},
 }
 ```
 
 The chaos variants are pre-applied TrueFoundry Virtual Models whose priority-0 target uses a deliberately invalid integration (`openai-broken` with `sk-broken-on-purpose` as the API key). When chaos is active, the shim rewrites the `model` field in the outgoing JSON body so the gateway hits the broken target, gets a real error, and falls back through the rest of its priority chain. This makes the demonstration *honest*: there is no mocking — the gateway's own retry and fallback logic does the work.
 
-**Virtual Model manifests** were applied via `tfy apply -f gateway-config/*.yaml`. We figured out the working schema (`provider-account/virtual-model` with `integrations[].routing_config`) by dumping an existing provider account from the management API (`GET /api/svc/v1/provider-accounts`) and adapting:
+**Virtual Model manifests** were applied via `tfy apply -f gateway-config/*.yaml`. The working schema (`provider-account/virtual-model` with `integrations[].routing_config`) was assembled by inspecting an existing provider account through the management API and adapting:
 
 ```yaml
 name: resilient-chat
 type: provider-account/virtual-model
 collaborators:
   - role_id: provider-account-manager
-    subject: user:rhaikal91@gmail.com
+    subject: user:<email>
 integrations:
   - name: resilient-chat
     type: integration/model/virtual
@@ -92,63 +101,57 @@ integrations:
           priority: 2
 ```
 
-**The dashboard** (`src/unsinkable/dashboard.py`) is a small FastAPI app with an in-memory ring buffer (capacity 500) and SSE streaming. Chaos buttons in the UI POST to `/api/chaos/{break|brownout|clear}`, which write the state file and synthesize a `chaos-update` event so the banner updates instantly without waiting for the next LLM request.
+**The Anthropic adapter** (`src/unsinkable/anthropic_adapter.py`) is a translation layer. TF's gateway exposes an OpenAI-compatible endpoint, so the adapter accepts the Anthropic SDK's `messages.create(model, max_tokens, system, messages, ...)` shape, normalizes content blocks to plain strings, lifts the `system` prompt to a `{role: "system"}` message, calls the OpenAI shim under the hood, and translates the response back to an Anthropic-shaped `Message` object with a proper `stop_reason` mapping (`stop → end_turn`, `length → max_tokens`, `tool_calls → tool_use`).
 
-**The MCP client** (`src/unsinkable/mcp.py`) uses `AsyncExitStack` to manage stdio sessions to multiple FastMCP backends. Each `call_tool` tries backends in priority order, skipping those matched by an active `mcp-*` chaos scenario; exceptions from one backend trigger an automatic attempt on the next.
+**The codemod** (`src/unsinkable/wire.py`) uses libcst so whitespace, comments, and aliases survive the rewrite. It refuses to silently drop unknown symbols (`from openai import OpenAI, ChatCompletion` leaves the whole line intact and emits a warning), refuses to touch `import *`, and warns on bare `import openai` patterns rather than guessing. A `--dry-run` flag prints unified diffs without writing.
 
-**Distribution** uses Hatchling for builds and Twine for the PyPI upload. The 11-test pytest suite covers configuration parsing, the chaos state lifecycle, body-rewrite invariants, and live MCP failover against two locally spawned FastMCP servers.
+**The dashboard** (`src/unsinkable/dashboard.py`) is a small FastAPI app with an in-memory ring buffer (capacity 500) and SSE streaming. Chaos buttons in the UI POST to `/api/chaos/{break|brownout|clear}`, which write the state file and synthesize a `chaos-update` event so the banner updates instantly without waiting for the next LLM request. The stats row now includes p50/p95/p99 latency percentiles computed from a rolling window of the last 50 events.
 
-**The trailer** was built with [HyperFrames](https://hyperframes.heygen.com): ten sub-compositions wired together in a 90-second root timeline, GSAP-driven animations, deterministic seekable rendering. Audio (4 narration lines, 6 SFX, a custom 90-second music track) was generated through the [ElevenLabs](https://elevenlabs.io/) text-to-speech, sound-generation, and music endpoints, then sequenced across separate audio tracks to avoid same-track collisions. Final render was done in Docker because the local WSL environment was missing `libnspr4` / `libnss3` for headless Chrome.
+**The MCP client** (`src/unsinkable/mcp.py`) uses `AsyncExitStack` to manage sessions to multiple backends, dispatching on `backend.kind` between local `stdio_client` and remote `streamablehttp_client`. Each `call_tool` tries backends in priority order, skipping those matched by an active `mcp-*` chaos scenario; exceptions from one backend trigger an automatic attempt on the next.
 
-**The Vercel demo** (`web-demo/index.html`) is a single eighteen-kilobyte HTML file with a client-side state machine that simulates the gateway round-trip using pre-canned responses sourced from a real `unsinkable demo` run. Same dashboard look, identical buttons, no backend.
+**Observability fan-out.** A `CompositeSink` lets the instrumented transport emit each `RequestEvent` to multiple sinks — the local dashboard, an OpenTelemetry OTLP/HTTP exporter, or both. The OTel sink decorates spans with semantic-convention-ish attributes (`tfy.requested_model`, `tfy.resolved_model`, `tfy.chaos_scenario`, `llm.usage.prompt_tokens`, `http.status_code`) so traces correlate cleanly with downstream APM tools.
+
+**Distribution.** Hatchling for builds, twine for the PyPI upload, two versions shipped (0.1.0 and 0.2.0). The 45-test pytest suite covers configuration parsing, the chaos state lifecycle (including the production-guardrail kill switch), body-rewrite invariants, Anthropic request/response translation, the codemod against representative import shapes, OTel span attributes via the in-memory exporter, and live MCP failover against two locally spawned FastMCP servers.
 
 ## Challenges we ran into
 
-**TrueFoundry's Virtual MCP Server schema is sparsely documented.** The public docs describe the routing-config shape but not the wrapping manifest. The CLI validator and server schema validator both rejected our first attempts with cryptic `must have required property 'integrations'` errors. We unblocked by dumping an existing provider account from `GET /api/svc/v1/provider-accounts` and reverse-engineering the working YAML.
+**TrueFoundry's Virtual Model schema is sparsely documented for `tfy apply`.** The public docs describe the `routing_config` block but not the wrapping manifest. Our first attempts failed validation with `must have required property 'integrations'` errors from the server's JSON-schema validator. We unblocked by inspecting an existing provider account through `GET /api/svc/v1/provider-accounts` and reverse-engineering the working YAML — `provider-account/virtual-model` with the routing config nested one level deeper, inside `integrations[].routing_config`, not at the top level the docs implied.
 
-**Naming quirk.** A Virtual Model named `resilient-chat` exposes itself at `resilient-chat/resilient-chat`, not `<tenant>/<name>` as you might expect from gateway analogues. We tripped on this twice before realizing the model ID format is `<provider-account-name>/<integration-name>`.
+**Naming quirk.** A Virtual Model named `resilient-chat` exposes itself at `resilient-chat/resilient-chat`, not `<tenant>/<name>` as you might expect from gateway analogues. The model ID format is `<provider-account-name>/<integration-name>`, and for Virtual Models both halves end up being the VM's name. This tripped us up twice before the pattern clicked.
 
-**Authentic chaos is hard.** We considered three approaches: client-side fault injection (deceptive — the gateway never sees the failure), TF management API mutation of live VM configs (real but eats time and has rollback risk), and pre-broken Virtual Models (real and idempotent). We chose the third. The model-name-swap trick means the gateway hits an integration with a deliberately invalid key, returns a real 401, and the priority chain's fallback fires for real. The demo is honest end-to-end.
+**Authentic chaos is hard.** We considered three approaches: client-side fault injection (deceptive — the gateway never sees the failure), TF management API mutation of live VM configs (real but eats time and carries rollback risk), and pre-broken Virtual Models (real and idempotent). We chose the third. The model-name-swap trick means the gateway hits an integration with a deliberately invalid key, returns a real 4xx/5xx, and the priority chain's fallback fires for real. The demo is honest end-to-end.
 
-**An asyncio test wrapped a `RuntimeError` in an `ExceptionGroup`.** Our `test_chaos_all_raises` was asserting `pytest.raises(RuntimeError, match=...)` but the error was wrapped by `AsyncExitStack` cleanup, so the matcher missed. Fixed by catching the exception inside the `async with` block and returning it to the caller for assertion.
-
-**Headless Chrome was missing system libs on WSL.** `puppeteer` failed with `libnspr4.so: cannot open shared object file`. Without sudo we couldn't `apt install` the missing libs, so we routed the entire HyperFrames render through Docker via the CLI's `--docker` flag.
-
-**ElevenLabs billing failure.** The first attempt at audio generation returned `payment_issue` on every endpoint. Required pausing for the user to settle the invoice before retrying.
-
-**The OpenAI SDK install was occasionally corrupt.** A fresh `pip install -e .[dev]` left us with `ModuleNotFoundError: openai.types.admin.organization.projects.groups.role_list_params`. Resolved by `pip install --force-reinstall --no-deps openai`. Suspect a partial wheel cache.
-
-**Vercel CLI non-interactive mode requires `--scope`.** With a token attached to a multi-team account, `vercel deploy --prod --yes` refused to pick a default. Explicit `--scope rhaikal91-2932s-projects` unblocked the deploy.
+**The gateway is OpenAI-compatible only.** TrueFoundry exposes `/api/llm/openai/v1` but no native `/api/llm/anthropic/v1`. For the `unsinkable.Anthropic` adapter to inherit the same gateway resilience, we had to translate the Anthropic Messages API to OpenAI Chat Completions in flight — including normalizing structured content blocks, lifting the top-level `system` prompt into the messages list, mapping `stop_sequences` to `stop`, and reversing the `finish_reason` mapping on the response. The upside is that every Anthropic call site now benefits from the same fallback chain as the OpenAI ones, without configuring a separate gateway path.
 
 ## Accomplishments that we're proud of
 
-- **`pip install unsinkable` is real.** The package shipped to PyPI in version 0.1.0 and we verified a clean install in an empty virtualenv: import works, CLI works, all four subcommands present.
+- **`pip install unsinkable` is real.** Two versions shipped to PyPI during the hackathon (0.1.0 and 0.2.0), each verified with a clean-venv install: imports work, CLI works, all five subcommands present.
 - **The chaos demonstration is honest.** Clicking "Cascade" really does cause two provider failures at the gateway before Gemini answers. The model name the shim sends gets rewritten; the gateway tries `openai-broken/gpt-4o`, fails for real, tries `anthropic-broken/claude-sonnet-4-6`, fails for real, lands on `google-gemini/gemini-2.5-flash-lite`. The `x-tfy-resolved-model` header in the response proves which target ultimately answered. No mocking, no theater.
-- **Eleven tests green**, including live MCP failover that spawns two `FastMCP` stdio servers and asserts the resilient client switches backends when the primary is marked broken.
-- **The drop-in shim preserves the full `openai-python` surface area** because we intercept transport, not the resource methods. Embeddings, streaming, tool calls, structured outputs — all work without us re-implementing anything.
-- **A cinematic ninety-second trailer** rendered deterministically from HTML + GSAP, with mad-scientist narration synced to lightning bolts cracking across the dashboard at each provider failure.
-- **A live Vercel demo** that mirrors the dashboard with zero backend, so judges can interact with the resilience story in their browser without installing anything.
-- **Eleven concurrent tasks tracked and shipped** in roughly forty-eight hours: SDK, chaos engine, dashboard, MCP, demo CLI, tests, PyPI release, GitHub repo, ninety-second trailer, web demo, professional README.
+- **The drop-in shim preserves the full `openai-python` surface area** because we intercept transport, not the resource methods. Embeddings, streaming, tool calls, structured outputs — all work without us re-implementing anything. The Anthropic adapter shares the same transport, so observability, chaos awareness, and the production guardrail apply uniformly.
+- **Forty-five tests green**, including live MCP failover that spawns two `FastMCP` stdio servers and asserts the resilient client switches backends when the primary is marked broken.
+- **The `unsinkable wire` codemod** rewrites an existing project's `from openai import OpenAI` calls to `from unsinkable import OpenAI` in one command, with `--dry-run` diffs, alias preservation, and refusal to silently drop unknown symbols.
+- **Production guardrail.** `UNSINKABLE_DISABLE_CHAOS=1` flips the chaos engine into a true no-op at the transport layer, so a stale state file from a developer laptop cannot affect a deployed agent. This was the smallest patch in v0.2.0 but it changes the operational story entirely.
+- **End-to-end observability.** Request events stream to a local dashboard *and* (optionally) to any OTLP-compatible APM via the new OTel exporter, so the same telemetry that drives the demo can land in Honeycomb, Datadog, or Grafana Tempo without re-instrumentation.
 
 ## What we learned
 
-**TrueFoundry's gateway is genuinely powerful, but the developer story is the bottleneck.** The two-line wiring is what closes the loop between "we have an LLM app" and "we have a resilient LLM app."
+**TrueFoundry's gateway is genuinely powerful, but the developer story is the bottleneck.** The two-line wiring, the codemod, and the drop-in Anthropic adapter together close the loop between "we have an LLM app" and "we have a resilient LLM app." The infrastructure was already there; what mattered was making the on-ramp invisible.
 
-**Mirror the resilience pattern at the client too.** Even with a smart gateway, some failure modes are client-side problems: network partition between the app and the gateway, tool servers that aren't behind the gateway, slow tool calls that the gateway never sees. Putting the same fallback discipline on the agent's tool layer (via `ResilientMcpClient`) tells the same story end-to-end.
+**Mirror the resilience pattern at the client too.** Even with a smart gateway, some failure modes are client-side problems: network partition between the app and the gateway, MCP tool servers that aren't behind the gateway, request payloads that need to be mutated rather than rerouted. The chaos engine's body-override scenarios (`truncate`) and the client-side MCP failover are the same discipline as gateway-side priority routing, just applied earlier in the request lifecycle.
 
-**Real chaos beats simulated chaos.** Demoing actual gateway-level fallback is dramatically more compelling than mocked errors, and it isn't much more work once you accept the model-name-swap trick.
+**Real chaos beats simulated chaos.** Demoing actual gateway-level fallback is dramatically more compelling than mocked errors, and it isn't much more work once the model-name-swap trick is in place. The `x-tfy-resolved-model` header is the proof point — once you can show *which* target answered, the resilience story tells itself.
 
-**HyperFrames's seek-driven deterministic renderer is a useful primitive.** Producing video from HTML/CSS/GSAP that renders frame-identically across machines opens up a workflow where you can iterate on a trailer like a webpage and re-render in two minutes.
+**Translation adapters earn their keep.** The Anthropic adapter is a hundred and fifty lines of request/response translation, but it lets every existing `anthropic.Anthropic` call site swap to `from unsinkable import Anthropic` with no other change and inherit the entire gateway fallback chain. Compatibility shims are unglamorous but they multiply reach.
 
-**Single-file static HTML still earns its keep.** The Vercel demo is one eighteen-kilobyte file. It loads instantly, requires zero infrastructure, and gives judges the entire interactive story in a browser tab.
+**Optional dependencies keep the install lean.** Splitting opentelemetry and libcst into `[otel]` and `[codemod]` extras keeps `pip install unsinkable` to its core surface, while letting power users opt into the heavier integrations explicitly.
 
 ## What's next for Unsinkable Ship
 
-- **Move MCP failover to TrueFoundry's Virtual MCP Server** instead of the client-side wrapper. The schema is figured out; the missing piece is hosting publicly reachable MCP servers for TF to call.
-- **Anthropic SDK adapter.** Today only OpenAI-compatible clients are supported; we want `from unsinkable import Anthropic` to do the equivalent wiring.
-- **A codemod (`unsinkable wire .`)** that scans an existing repository and rewrites `openai.OpenAI(...)` constructors to the unsinkable variant, for teams that want adoption without touching imports manually.
-- **Richer chaos scenarios:** rate-limit storms, partial-response truncation, token-budget exhaustion, region-localized outages.
-- **Per-route percentile observability.** The dashboard already collects latency per request; surfacing p50 / p95 / p99 distinguishes slow agents from slow providers.
-- **Native OpenTelemetry exporter** so request events flow into existing observability stacks (Honeycomb, Datadog, Grafana Cloud) without depending on the bundled dashboard.
-- **Production guardrails.** A config flag that hard-disables chaos rewriting in production environments, so a stray `unsinkable chaos break openai` on a developer laptop can never affect a deployed app.
-- **Sponsor track 2.0.** Submitting `unsinkable` to PyPI as a public package was the most demanding constraint we could give ourselves, but the next step is making it useful enough that someone files an issue.
+The original "what's next" list — production guardrail, latency percentiles, rate-limit + truncate chaos, the Anthropic adapter, the `unsinkable wire` codemod, the OpenTelemetry exporter, and remote MCP transport — all shipped in v0.2.0 during the hackathon. The next iteration tightens the same axes:
+
+- **Full-fidelity Anthropic adapter.** The current translation layer covers `messages.create` with content blocks, system prompts, `max_tokens`, `temperature`, and `stop_sequences`. Streaming, tool use, and prompt caching are the next surfaces to translate so the adapter is a true superset of `anthropic-python`.
+- **More provider SDKs.** Mistral, Cohere, and Google AI Studio all ship Python SDKs that could get the same drop-in treatment, with translation adapters where the provider's request shape diverges from OpenAI Chat Completions.
+- **Codemod expansion.** Today `unsinkable wire` rewrites `from X import Y` lines. The next step is handling `import openai` followed by `openai.OpenAI(...)` constructor calls, and emitting a refactor commit that includes a CHANGELOG-style summary of what was modified.
+- **Region-aware chaos.** Simulate a regional outage by routing through a Virtual Model whose priority-0 target is a region-specific deployment of an integration, so the fallback story can be told at the geographic layer too.
+- **Sync with the gateway, both directions.** Pair the shim with a TF policy exporter that emits `gateway-policy` YAML alongside the application code, so the routing config that the app *expects* and the config the gateway *enforces* are always in lockstep.
+- **Hosted dashboard.** The current dashboard runs locally; a hosted-mode that accepts events from many agents over WebSockets would let teams see the same resilience picture in production without each developer running their own UI process.
