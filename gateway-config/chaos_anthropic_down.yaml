@@ -1,0 +1,36 @@
+# Chaos VM: priority-1 Anthropic target is the broken integration. Pair with
+# break-openai to demo a two-provider outage falling all the way to Gemini.
+name: chaos-anthropic-down
+type: provider-account/virtual-model
+collaborators:
+  - role_id: provider-account-manager
+    subject: user:rhaikal91@gmail.com
+  - role_id: provider-account-access
+    subject: team:everyone
+integrations:
+  - name: chaos-anthropic-down
+    type: integration/model/virtual
+    model_types: [chat]
+    routing_config:
+      type: priority-based-routing
+      load_balance_targets:
+        - target: openai/gpt-4o-mini
+          priority: 0
+          fallback_candidate: true
+          fallback_status_codes: ["401", "403", "404", "408", "429", "500", "502", "503", "504"]
+          retry_config:
+            attempts: 1
+            delay: 100
+        - target: anthropic-broken/claude-sonnet-4-6
+          priority: 1
+          fallback_candidate: true
+          fallback_status_codes: ["400", "401", "403", "404", "408", "429", "500", "502", "503", "504"]
+          retry_config:
+            attempts: 1
+            delay: 50
+        - target: google-gemini/gemini-2.5-flash-lite
+          priority: 2
+          fallback_candidate: true
+          retry_config:
+            attempts: 1
+            delay: 100
