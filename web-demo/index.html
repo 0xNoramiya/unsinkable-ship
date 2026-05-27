@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Unsinkable — Live Resilience Demo</title>
+  <meta name="description" content="Interactive demo of the Unsinkable Ship dashboard. Break OpenAI, watch the gateway fall back to Claude or Gemini in real time." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='14' font-size='14'%3E🚢%3C/text%3E%3C/svg%3E" />
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0a0e14;
+      --panel: #10171f;
+      --line: #1c2530;
+      --dim: #7d8c9c;
+      --fg: #d7e0ea;
+      --amber: #f0a868;
+      --green: #7fe0a3;
+      --orange: #f0c060;
+      --red: #ff8a8a;
+      --blue: #80a8f0;
+      --purple: #c8a8f0;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: var(--bg); color: var(--fg);
+      font: 14px/1.5 "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+      min-height: 100vh; }
+    body { padding: 32px; max-width: 1480px; margin: 0 auto; }
+
+    header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+    header h1 { margin: 0; font-size: 28px; letter-spacing: -0.01em; }
+    header .meta { color: var(--dim); font-size: 13px; }
+    header .meta a { color: var(--amber); text-decoration: none; border-bottom: 1px dotted; }
+    header .meta a:hover { color: #ffc890; }
+    .sub { color: var(--dim); margin-bottom: 18px; font-size: 14px; }
+    .sub .pill { background: #2a1e3a; color: var(--purple); padding: 2px 10px; border-radius: 10px; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; margin-left: 6px; }
+
+    .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+      padding: 14px 16px; margin-bottom: 14px; }
+    .panel h2 { margin: 0 0 10px; font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.08em; color: var(--dim); font-weight: 600; }
+
+    #chaos { display: none; padding: 12px 16px; margin-bottom: 14px;
+      background: #3a1e1e; color: #ffd0d0; border-radius: 6px;
+      border: 1px solid #5a2828; font-weight: 500; }
+    #chaos.on { display: block; }
+    #chaos.purple { background: #2a1e3a; color: #f0d0ff; border-color: #4a2858; }
+
+    .stats { display: flex; gap: 10px; flex-wrap: wrap; }
+    .stat { background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
+      padding: 8px 14px; min-width: 90px; }
+    .stat .num { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .stat .lbl { color: var(--dim); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; margin-top: 2px; }
+    .stat.wide { flex: 1; min-width: 200px; }
+    .stat canvas { width: 100%; height: 48px; display: block; }
+
+    .controls { display: flex; gap: 8px; flex-wrap: wrap; }
+    button { background: #1a2733; color: var(--fg); border: 1px solid #2a3b4f;
+      padding: 7px 14px; border-radius: 5px; font: inherit; cursor: pointer;
+      transition: background 0.15s, transform 0.08s; }
+    button:hover { background: #243446; }
+    button:active { transform: scale(0.96); }
+    button.danger { background: #3a1e1e; border-color: #5a2828; color: #ffb0b0; }
+    button.danger:hover { background: #4a2828; }
+    button.warn { background: #3a311e; border-color: #5a4828; color: #ffd070; }
+    button.warn:hover { background: #4a4028; }
+    button.ok { background: #1e3a2a; border-color: #285a38; color: #9fe0a3; }
+    button.ok:hover { background: #284a32; }
+    button.primary { background: var(--amber); color: #1a1208; border-color: var(--amber); font-weight: 600; }
+    button.primary:hover { background: #ffc890; }
+
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); }
+    th { color: var(--dim); font-weight: 600; font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.04em; }
+    tr.err td { background: rgba(220,60,60,0.10); }
+    tr.fb td { background: rgba(220,160,60,0.10); }
+    tr.pending td { color: var(--dim); font-style: italic; }
+    tr.new td { animation: slideIn 0.4s ease-out; }
+    @keyframes slideIn { from { transform: translateY(-8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+    .pill { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+    .pill.ok { background: #1e3a2a; color: var(--green); }
+    .pill.err { background: #3a1e1e; color: var(--red); }
+    .pill.fb { background: #3a311e; color: var(--orange); }
+    .pill.chaos { background: #2a1e3a; color: var(--purple); margin-left: 4px; }
+
+    .badge { display: inline-block; padding: 1px 8px; border-radius: 3px; font-size: 11px; font-weight: 500; }
+    .badge.openai { background: #0f3322; color: var(--green); }
+    .badge.anthropic { background: #3a2a14; color: var(--amber); }
+    .badge.gemini, .badge.google-gemini, .badge.google { background: #14253a; color: var(--blue); }
+    .badge.broken { background: #3a1e1e; color: var(--red); text-decoration: line-through; }
+    .badge.primary, .badge.secondary { background: #2a1e3a; color: var(--purple); }
+    .badge.dim { color: var(--dim); }
+    .kind-mcp { color: var(--purple); font-weight: 500; padding: 1px 6px; background: #2a1e3a; border-radius: 3px; font-size: 11px; }
+
+    .small { color: var(--dim); font-size: 11px; }
+    .empty { padding: 40px 16px; text-align: center; color: var(--dim); font-size: 13px; }
+
+    .scenario-bar { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+    .scenario-bar .label { color: var(--dim); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; margin-right: 6px; }
+
+    footer { margin-top: 28px; padding: 16px; color: var(--dim); font-size: 12px; text-align: center; border-top: 1px solid var(--line); }
+    footer a { color: var(--amber); text-decoration: none; }
+
+    @media (max-width: 720px) {
+      body { padding: 18px; }
+      header { flex-direction: column; gap: 6px; }
+      .stat { min-width: 60px; padding: 6px 10px; }
+      .stat .num { font-size: 18px; }
+      th, td { padding: 5px 6px; font-size: 12px; }
+      .badge, .pill { font-size: 10px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🚢 Unsinkable — Live Resilience</h1>
+  <div class="meta">
+    <a href="https://pypi.org/project/unsinkable/" target="_blank" rel="noopener">pypi</a>
+    &nbsp;·&nbsp;
+    <a href="https://github.com/0xNoramiya/unsinkable-ship" target="_blank" rel="noopener">github</a>
+  </div>
+</header>
+<div class="sub">
+  Interactive mirror of the real-time dashboard.
+  <span class="pill">PRE-RECORDED · CLIENT-SIDE</span>
+</div>
+
+<div id="chaos"></div>
+
+<div class="scenario-bar">
+  <span class="label">Try:</span>
+  <button class="primary" onclick="ask()">▶ Ask Research Buddy</button>
+  <button onclick="autoDemo()">↻ Run full auto-demo (30s)</button>
+  <button onclick="reset()">↺ Reset</button>
+</div>
+
+<div class="panel">
+  <h2>Stats</h2>
+  <div class="stats">
+    <div class="stat"><div class="num" id="s-total">0</div><div class="lbl">Requests</div></div>
+    <div class="stat"><div class="num" id="s-ok" style="color:var(--green)">0</div><div class="lbl">OK</div></div>
+    <div class="stat"><div class="num" id="s-fb" style="color:var(--orange)">0</div><div class="lbl">Fallback</div></div>
+    <div class="stat"><div class="num" id="s-err" style="color:var(--red)">0</div><div class="lbl">Error</div></div>
+    <div class="stat"><div class="num" id="s-avg">–</div><div class="lbl">Avg latency</div></div>
+    <div class="stat"><div class="num" id="s-tokens">0</div><div class="lbl">Tokens</div></div>
+    <div class="stat wide">
+      <canvas id="spark" width="280" height="48"></canvas>
+      <div class="lbl">Latency (last 20)</div>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>Chaos controls</h2>
+  <div class="controls">
+    <button class="danger" onclick="chaos('openai')">Break OpenAI</button>
+    <button class="danger" onclick="chaos('anthropic')">Break Anthropic</button>
+    <button class="danger" onclick="chaos('cascade')">Cascade (both)</button>
+    <button class="danger" onclick="chaos('mcp-primary')">Break MCP primary</button>
+    <button class="warn" onclick="chaos('brownout', 3)">Brownout +3s</button>
+    <button class="warn" onclick="chaos('brownout', 8)">Brownout +8s</button>
+    <button class="ok" onclick="clearChaos()">Clear chaos</button>
+  </div>
+</div>
+
+<div class="panel" style="padding:0">
+  <table id="events">
+    <thead><tr>
+      <th style="padding-left:16px">time</th>
+      <th>requested</th>
+      <th>resolved</th>
+      <th>status</th>
+      <th>latency</th>
+      <th>note</th>
+    </tr></thead>
+    <tbody id="tbody">
+      <tr class="empty-row"><td colspan="6"><div class="empty">No requests yet — click <strong style="color:var(--amber)">▶ Ask Research Buddy</strong> to fire one through the gateway.</div></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<footer>
+  This is a client-side mirror of the real <code>unsinkable dashboard</code>. Responses are pre-canned to match an actual run logged by the live shim.
+  <br />
+  Get the real thing: <code>pip install unsinkable</code> · <a href="https://github.com/0xNoramiya/unsinkable-ship">github.com/0xNoramiya/unsinkable-ship</a>
+</footer>
+
+<script>
+const state = {
+  events: [],
+  stats: { total: 0, ok: 0, fb: 0, err: 0, tokens: 0, latencies: [] },
+  chaos: { active: null, brownout: 0 },
+  reqSeq: 0,
+};
+
+// Pre-canned responses per chaos scenario — sourced from a real run of `unsinkable demo`
+const SCENARIOS = {
+  null: { model: "gpt-4o-mini-2024-07-18", provider: "openai", latency: 2174, tokens: 78,
+    reply: "Sure, how can I help?" },
+  openai: { model: "claude-sonnet-4-6", provider: "anthropic", latency: 2733, tokens: 92, fallback: true,
+    reply: "What should I say?" },
+  anthropic: { model: "gemini-2.5-flash-lite", provider: "gemini", latency: 1850, tokens: 64, fallback: true,
+    reply: "Sure thing." },
+  cascade: { model: "gemini-2.5-flash-lite", provider: "gemini", latency: 1742, tokens: 88, fallback: true, cascade: true,
+    reply: "Here are three colors: Red, Blue, Green." },
+};
+const MCP_HAPPY = { backend: "primary", latency: 31, reply: "Top results for 'Rust 1.80 release notes'." };
+const MCP_FALL  = { backend: "secondary", latency: 15, reply: "Backup results for 'Rust 1.80 release notes'.", fallback: true };
+
+const $ = (id) => document.getElementById(id);
+const tbody = $("tbody");
+const banner = $("chaos");
+const spark = $("spark");
+
+function fmtTime() {
+  const d = new Date();
+  return d.toTimeString().slice(0, 8);
+}
+
+function badge(model, kind) {
+  if (kind === "mcp-backend") {
+    const cls = model === "primary" ? "primary" : "secondary";
+    return `<span class="badge ${cls}">${model}</span>`;
+  }
+  const provider = model.includes("claude") ? "anthropic"
+    : model.includes("gpt") ? "openai"
+    : model.includes("gemini") ? "gemini"
+    : model.includes("broken") ? "broken"
+    : "dim";
+  return `<span class="badge ${provider}">${model}</span>`;
+}
+
+function ensureEmptyCleared() {
+  const empty = tbody.querySelector(".empty-row");
+  if (empty) empty.remove();
+}
+
+function pendingRow() {
+  ensureEmptyCleared();
+  const tr = document.createElement("tr");
+  tr.className = "pending";
+  tr.id = `req-${++state.reqSeq}`;
+  tr.innerHTML = `
+    <td class="small" style="padding-left:16px">${fmtTime()}</td>
+    <td><span class="badge dim">resilient-chat/resilient-chat</span></td>
+    <td><span class="small">routing through gateway…</span></td>
+    <td><span class="small">…</span></td>
+    <td class="small">–</td>
+    <td class="small">in flight</td>`;
+  tbody.prepend(tr);
+  return tr;
+}
+
+function resolveRow(tr, scenario, latencyMs, withChaos) {
+  tr.className = withChaos ? "fb new" : "new";
+  const chaosPill = withChaos ? `<span class="pill chaos">CHAOS</span>` : "";
+  const pill = withChaos ? `<span class="pill fb">FALLBACK</span>` : `<span class="pill ok">OK</span>`;
+  const note = withChaos
+    ? (scenario.cascade ? `3-hop: openai-broken → anthropic-broken → gemini` : `gateway swapped → ${scenario.model.split("-")[0]}`)
+    : "";
+  tr.innerHTML = `
+    <td class="small" style="padding-left:16px">${fmtTime()}</td>
+    <td><span class="badge dim">resilient-chat/resilient-chat</span>${chaosPill}</td>
+    <td>${badge(scenario.model)}</td>
+    <td>${pill} <span class="small">200</span></td>
+    <td class="small">${Math.round(latencyMs)}ms</td>
+    <td class="small">${note}</td>`;
+  bumpStats(scenario, latencyMs, withChaos);
+}
+
+function bumpStats(scenario, latencyMs, fallback) {
+  state.stats.total++;
+  if (fallback) state.stats.fb++;
+  else state.stats.ok++;
+  state.stats.tokens += scenario.tokens || 0;
+  state.stats.latencies.push(latencyMs);
+  if (state.stats.latencies.length > 20) state.stats.latencies.shift();
+  renderStats();
+}
+
+function renderStats() {
+  $("s-total").textContent = state.stats.total;
+  $("s-ok").textContent = state.stats.ok;
+  $("s-fb").textContent = state.stats.fb;
+  $("s-err").textContent = state.stats.err;
+  $("s-tokens").textContent = state.stats.tokens;
+  const lats = state.stats.latencies;
+  if (lats.length > 0) {
+    const avg = lats.reduce((a, b) => a + b, 0) / lats.length;
+    $("s-avg").textContent = Math.round(avg) + "ms";
+  } else {
+    $("s-avg").textContent = "–";
+  }
+  drawSpark();
+}
+
+function drawSpark() {
+  const ctx = spark.getContext("2d");
+  const dpr = window.devicePixelRatio || 1;
+  spark.width = spark.offsetWidth * dpr;
+  spark.height = 48 * dpr;
+  ctx.scale(dpr, dpr);
+  const w = spark.offsetWidth, h = 48;
+  ctx.clearRect(0, 0, w, h);
+  const data = state.stats.latencies;
+  if (data.length < 2) return;
+  const max = Math.max(...data, 1);
+  ctx.strokeStyle = "#7fc8e0"; ctx.lineWidth = 1.5;
+  ctx.fillStyle = "rgba(127,200,224,0.18)";
+  ctx.beginPath();
+  data.forEach((v, i) => {
+    const x = (i / (data.length - 1)) * (w - 2) + 1;
+    const y = h - (v / max) * (h - 6) - 3;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+  ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath(); ctx.fill();
+}
+
+function setBanner(html, purple) {
+  if (!html) {
+    banner.classList.remove("on", "purple");
+    banner.textContent = "";
+    return;
+  }
+  banner.innerHTML = html;
+  banner.classList.add("on");
+  banner.classList.toggle("purple", !!purple);
+}
+
+function chaos(kind, arg) {
+  if (kind === "brownout") {
+    state.chaos.brownout = arg;
+    refreshBanner();
+  } else {
+    state.chaos.active = kind;
+    refreshBanner();
+  }
+}
+
+function refreshBanner() {
+  const c = state.chaos;
+  if (c.active === "mcp-primary") {
+    setBanner(`⚠ MCP CHAOS — primary search server down · client will fail over`, true);
+  } else if (c.active) {
+    let txt = `⚠ CHAOS ACTIVE — ${c.active} :: resilient-chat → chaos-${c.active}-down`;
+    if (c.active === "cascade") txt = `⚠ CHAOS ACTIVE — cascade :: resilient-chat → chaos-cascade`;
+    if (c.brownout) txt += ` (+${c.brownout}s latency)`;
+    setBanner(txt);
+  } else if (c.brownout) {
+    setBanner(`⚠ BROWNOUT — +${c.brownout}s latency per request`);
+  } else {
+    setBanner(null);
+  }
+}
+
+function clearChaos() {
+  state.chaos = { active: null, brownout: 0 };
+  refreshBanner();
+}
+
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function ask() {
+  // MCP-specific path
+  if (state.chaos.active === "mcp-primary") {
+    return askMcp(true);
+  }
+
+  const scenario = SCENARIOS[state.chaos.active] || SCENARIOS.null;
+  const withChaos = !!scenario.fallback;
+  const baseLatency = scenario.latency + state.chaos.brownout * 1000;
+  const tr = pendingRow();
+  // Simulate the request lifecycle: pending → resolved
+  await delay(Math.min(baseLatency, 4000)); // cap visible wait for UX
+  resolveRow(tr, scenario, baseLatency, withChaos);
+}
+
+async function askMcp(broken) {
+  ensureEmptyCleared();
+  const tr = document.createElement("tr");
+  tr.className = "fb new";
+  tr.innerHTML = `
+    <td class="small" style="padding-left:16px">${fmtTime()}</td>
+    <td><span class="kind-mcp">MCP</span> ${badge(MCP_FALL.backend, "mcp-backend")}</td>
+    <td><span class="small">— skipped (chaos)</span></td>
+    <td><span class="pill chaos">SKIPPED</span></td>
+    <td class="small">–</td>
+    <td class="small">primary went down</td>`;
+  tbody.prepend(tr);
+
+  await delay(400);
+
+  const tr2 = document.createElement("tr");
+  tr2.className = "new";
+  tr2.innerHTML = `
+    <td class="small" style="padding-left:16px">${fmtTime()}</td>
+    <td><span class="kind-mcp">MCP</span> ${badge(MCP_FALL.backend, "mcp-backend")}</td>
+    <td><span class="small">web_search ${MCP_FALL.reply}</span></td>
+    <td><span class="pill ok">OK</span> <span class="small">200</span></td>
+    <td class="small">${MCP_FALL.latency}ms</td>
+    <td class="small">tool layer survived</td>`;
+  tbody.prepend(tr2);
+  bumpStats({ tokens: 0 }, MCP_FALL.latency, true);
+}
+
+function reset() {
+  state.events = [];
+  state.stats = { total: 0, ok: 0, fb: 0, err: 0, tokens: 0, latencies: [] };
+  state.chaos = { active: null, brownout: 0 };
+  state.reqSeq = 0;
+  tbody.innerHTML = `<tr class="empty-row"><td colspan="6"><div class="empty">No requests yet — click <strong style="color:var(--amber)">▶ Ask Research Buddy</strong> to fire one through the gateway.</div></td></tr>`;
+  refreshBanner();
+  renderStats();
+}
+
+let autoRunning = false;
+async function autoDemo() {
+  if (autoRunning) return;
+  autoRunning = true;
+  reset();
+  const steps = [
+    { do: () => ask() },
+    { wait: 800 },
+    { do: () => ask() },
+    { wait: 800 },
+    { do: () => chaos("openai") },
+    { wait: 500 },
+    { do: () => ask() },
+    { wait: 800 },
+    { do: () => chaos("cascade") },
+    { wait: 500 },
+    { do: () => ask() },
+    { wait: 800 },
+    { do: () => chaos("mcp-primary") },
+    { wait: 500 },
+    { do: () => ask() },
+    { wait: 1200 },
+    { do: () => clearChaos() },
+    { wait: 200 },
+    { do: () => ask() },
+  ];
+  for (const s of steps) {
+    if (s.do) await s.do();
+    if (s.wait) await delay(s.wait);
+  }
+  autoRunning = false;
+}
+
+renderStats();
+// Auto-play once on first load so judges see the story immediately
+window.addEventListener("load", () => {
+  setTimeout(autoDemo, 600);
+});
+</script>
+</body>
+</html>

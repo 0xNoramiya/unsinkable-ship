@@ -14,6 +14,10 @@ Built for the DevNetwork [AI + ML] Hackathon 2025 — **TrueFoundry "Resilient A
 
 Modern LLM apps are one provider outage away from a status-page incident. TrueFoundry's gateway already solves the *infrastructure* — fallback chains, retries, virtual MCP servers, observability. **Unsinkable Ship** is the missing two-line bridge: it wires your existing OpenAI-SDK app to that gateway with zero refactor, plus a chaos CLI, live dashboard, and a sample MCP-resilient agent so you can *prove* your resilience before production does.
 
+## Try it without installing
+
+**Live dashboard demo:** [unsinkable-demo.vercel.app](https://unsinkable-demo.vercel.app) — pre-recorded interactive mirror, no install needed.
+
 ## Install
 
 ```bash
