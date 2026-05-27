@@ -109,16 +109,26 @@ def chaos() -> None:
 
 
 @chaos.command("break")
-@click.argument("provider", type=click.Choice(["openai", "anthropic", "cascade"]))
+@click.argument("provider", type=click.Choice(
+    ["openai", "anthropic", "cascade", "mcp-primary", "mcp-secondary", "mcp-all"]
+))
 def chaos_break(provider: str) -> None:
-    """Swap the resilient model name to a pre-broken Virtual Model so TF's
-    gateway-side fallback fires for real. `cascade` breaks both providers."""
-    from unsinkable.chaos import STATE_PATH, activate
+    """Break a provider for the next request. LLM scenarios trigger TF
+    gateway-side fallback; mcp-* scenarios are honored by ResilientMcpClient."""
+    from unsinkable.chaos import MCP_SCENARIOS, STATE_PATH, activate, activate_mcp
 
-    state = activate(provider)
-    console.print(f"[red bold]CHAOS[/red bold] scenario active: [bold]{state.scenario}[/bold]")
-    for orig, swap in state.rewrites.items():
-        console.print(f"  [dim]{orig}[/dim] → [yellow]{swap}[/yellow]")
+    if provider in MCP_SCENARIOS:
+        state = activate_mcp(provider)
+        console.print(
+            f"[red bold]MCP CHAOS[/red bold] scenario active: [bold]{state.scenario}[/bold]"
+        )
+    else:
+        state = activate(provider)
+        console.print(
+            f"[red bold]CHAOS[/red bold] scenario active: [bold]{state.scenario}[/bold]"
+        )
+        for orig, swap in state.rewrites.items():
+            console.print(f"  [dim]{orig}[/dim] → [yellow]{swap}[/yellow]")
     console.print(f"[dim]state file: {STATE_PATH}[/dim]")
 
 

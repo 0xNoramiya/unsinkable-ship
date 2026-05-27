@@ -54,9 +54,14 @@ async def chaos_status() -> dict:
 
 @app.post("/api/chaos/break/{provider}")
 async def chaos_break(provider: str) -> dict:
-    if provider not in SCENARIOS:
+    from unsinkable.chaos import MCP_SCENARIOS, activate_mcp
+
+    if provider in MCP_SCENARIOS:
+        state = activate_mcp(provider)
+    elif provider in SCENARIOS:
+        state = activate(provider)
+    else:
         raise HTTPException(400, f"unknown scenario {provider!r}")
-    state = activate(provider)
     await _push_chaos_event(state)
     return {"ok": True, "scenario": state.scenario}
 
@@ -177,7 +182,9 @@ _HTML = """<!doctype html>
   .badge.anthropic { background:#3a2a14; color:#f0a868; }
   .badge.gemini, .badge.google-gemini, .badge.google { background:#14253a; color:#80a8f0; }
   .badge.broken, .badge.openai-broken, .badge.anthropic-broken { background:#3a1e1e; color:#f08080; }
+  .badge.primary, .badge.secondary { background:#2a1e3a; color:#c8a8f0; }
   .badge.dim { color:var(--dim); }
+  .kind-mcp { color:#c8a8f0; font-weight:500; }
 
   .small { color:var(--dim); font-size:11px; }
   .mono { font-family: inherit; }
@@ -210,6 +217,7 @@ _HTML = """<!doctype html>
     <button class="danger" onclick="chaos('break/openai')">Break OpenAI</button>
     <button class="danger" onclick="chaos('break/anthropic')">Break Anthropic</button>
     <button class="danger" onclick="chaos('break/cascade')">Cascade (both)</button>
+    <button class="danger" onclick="chaos('break/mcp-primary')">Break MCP primary</button>
     <button class="warn" onclick="chaos('brownout/3')">Brownout +3s</button>
     <button class="warn" onclick="chaos('brownout/8')">Brownout +8s</button>
     <button class="ok" onclick="chaos('clear')">Clear chaos</button>
@@ -232,6 +240,7 @@ const sparkCanvas = document.getElementById('spark');
 
 function providerOf(model) {
   if (!model) return 'unknown';
+  if (model === 'primary' || model === 'secondary') return model;
   if (model.includes('claude')) return 'anthropic';
   if (model.includes('gpt') || model.includes('o1')) return 'openai';
   if (model.includes('gemini')) return 'gemini';
@@ -242,7 +251,7 @@ function providerOf(model) {
 function badge(model) {
   if (!model) return '<span class="badge dim">-</span>';
   const p = providerOf(model);
-  const cls = ['openai','anthropic','gemini','broken'].includes(p) ? p : 'dim';
+  const cls = ['openai','anthropic','gemini','broken','primary','secondary'].includes(p) ? p : 'dim';
   return `<span class="badge ${cls}">${model}</span>`;
 }
 
@@ -332,9 +341,10 @@ function row(ev) {
     : ev.chaos
       ? `${ev.chaos.scenario}: ${providerOf(ev.chaos.original)} → ${providerOf(ev.resolved_model)}`
       : "";
+  const kindLabel = ev.kind === 'mcp' ? '<span class="kind-mcp">MCP</span> ' : '';
   tr.innerHTML = `
     <td class="small" style="padding-left:16px">${t}</td>
-    <td>${badge(ev.requested_model)} ${chaosPill}</td>
+    <td>${kindLabel}${badge(ev.requested_model)} ${chaosPill}</td>
     <td>${badge(ev.resolved_model)}</td>
     <td>${pill} <span class="small">${ev.status_code ?? ""}</span></td>
     <td class="small">${ev.latency_ms ? ev.latency_ms.toFixed(0) + "ms" : "-"}</td>

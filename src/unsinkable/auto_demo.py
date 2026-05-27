@@ -1,25 +1,37 @@
 from __future__ import annotations
 
+import asyncio
+import sys
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal
 
 import httpx
 from rich.console import Console
 from rich.panel import Panel
 
-from unsinkable import OpenAI
-from unsinkable.chaos import ChaosState, activate, activate_brownout
+from unsinkable import AsyncOpenAI, OpenAI
+from unsinkable.chaos import ChaosState, activate, activate_brownout, activate_mcp
 from unsinkable.config import get_settings
+from unsinkable.mcp import McpBackend, ResilientMcpClient
 
 console = Console()
+
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+MCP_BACKENDS = [
+    McpBackend("primary", sys.executable,
+               [str(REPO_ROOT / "examples/mcp_servers/search_primary.py")]),
+    McpBackend("secondary", sys.executable,
+               [str(REPO_ROOT / "examples/mcp_servers/search_secondary.py")]),
+]
 
 
 @dataclass
 class Step:
     title: str
     narration: str
-    action: Literal["ask", "chaos", "clear", "brownout"]
+    action: Literal["ask", "chaos", "clear", "brownout", "mcp_chaos", "mcp_call"]
     arg: str | None = None
     pause_after: float = 1.5
 
@@ -56,8 +68,22 @@ SCRIPT = [
     Step("Recovery", "Clear the chaos. Back to normal routing.",
          "clear", None, pause_after=1.0),
 
-    Step("Recovered", "We're back on the primary path. Demo done.",
-         "ask", "All good?", pause_after=2.0),
+    Step("Recovered", "We're back on the primary path.",
+         "ask", "All good?", pause_after=1.5),
+
+    Step("MCP layer too", "LLMs aren't the only thing that breaks. Tool servers do too. "
+         "Let's call web_search through our resilient MCP client.",
+         "mcp_call", "Rust 1.80 release notes", pause_after=2.0),
+
+    Step("Break the primary MCP", "Now we kill the primary search server.",
+         "mcp_chaos", "mcp-primary", pause_after=1.5),
+
+    Step("MCP fallback", "Same call. Primary is skipped; secondary answers. "
+         "Tools survive outages too.",
+         "mcp_call", "Rust 1.80 release notes", pause_after=2.5),
+
+    Step("Demo done", "Clearing everything.",
+         "clear", None, pause_after=0.5),
 ]
 
 
@@ -80,17 +106,35 @@ def _ask(client: OpenAI, prompt: str) -> tuple[str, str]:
     return r.model, f"{r.choices[0].message.content or ''}  [dim]({dt:.1f}s)[/dim]"
 
 
-def main() -> None:
+async def _mcp_call(mcp: ResilientMcpClient, query: str) -> tuple[str, str]:
+    t0 = time.perf_counter()
+    result = await mcp.call_tool("web_search", {"query": query})
+    dt = time.perf_counter() - t0
+    first_line = result.splitlines()[0] if result else ""
+    return first_line, f"  [dim]({dt*1000:.0f}ms)[/dim]"
+
+
+async def amain() -> None:
     s = get_settings()
     dashboard_root = (s.unsinkable_dashboard_url or "").rstrip("/")
     client = OpenAI()
+    async with ResilientMcpClient(MCP_BACKENDS) as mcp:
+        await _run_steps(client, mcp, dashboard_root)
+
+
+def main() -> None:
+    asyncio.run(amain())
+
+
+async def _run_steps(client: OpenAI, mcp: ResilientMcpClient, dashboard_root: str) -> None:
+    s = get_settings()
 
     console.print(Panel.fit(
         "[bold]Unsinkable Ship — Live Resilience Demo[/bold]\n"
         f"Default model: [cyan]{s.unsinkable_default_model}[/cyan]\n"
         f"Dashboard: [cyan]{dashboard_root or '(disabled)'}[/cyan]\n"
         "Pro tip: open the dashboard in a second window to see chaos visualized.",
-        title="🚢", border_style="cyan",
+        title="🚢 ", border_style="cyan",
     ))
 
     ChaosState.clear()
@@ -125,6 +169,20 @@ def main() -> None:
             console.print("  [green bold]>>> chaos cleared[/green bold]")
             if dashboard_root:
                 _post(f"{dashboard_root}/api/chaos/clear")
+        elif step.action == "mcp_call":
+            assert step.arg
+            try:
+                first, took = await _mcp_call(mcp, step.arg)
+                console.print(f"  [cyan]MCP[/cyan] web_search {step.arg!r}{took}")
+                console.print(f"  [green]→[/green] {first}")
+            except Exception as e:  # noqa: BLE001
+                console.print(f"  [red]FAIL[/red] {type(e).__name__}: {e}")
+        elif step.action == "mcp_chaos":
+            assert step.arg
+            activate_mcp(step.arg)
+            console.print(f"  [red bold]>>> mcp chaos {step.arg} activated[/red bold]")
+            if dashboard_root:
+                _post(f"{dashboard_root}/api/chaos/break/{step.arg}")
 
         time.sleep(step.pause_after)
 

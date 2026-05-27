@@ -36,14 +36,16 @@ That's the whole change. Your `chat.completions.create(...)` calls work unchange
 # Terminal 1 — start the dashboard
 unsinkable dashboard
 
-# Terminal 2 — run your agent
-python my_agent.py
+# Terminal 2 — run the scripted 14-step demo (LLM + MCP resilience)
+unsinkable demo
 
-# Terminal 3 — break things
-unsinkable chaos --break openai           # 100% 500s from OpenAI
-unsinkable chaos --brownout 8s openai     # OpenAI takes 8s every request
-unsinkable chaos --rate-limit openai      # 429s
-unsinkable chaos --mcp-fail web-search    # MCP tool crashes
+# OR manually:
+unsinkable chaos break openai          # priority-0 OpenAI target fails → fallback fires
+unsinkable chaos break anthropic       # similar, breaks Anthropic at gateway
+unsinkable chaos break cascade         # both OpenAI and Anthropic down → Gemini saves you
+unsinkable chaos brownout 8            # +8s latency per request
+unsinkable chaos break mcp-primary     # MCP tool server primary skipped → secondary answers
+unsinkable chaos clear                 # back to normal
 ```
 
 The dashboard at <http://localhost:8765> shows every request, every retry, every fallback hop — in real time.

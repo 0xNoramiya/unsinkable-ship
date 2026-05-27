@@ -53,6 +53,18 @@ SCENARIOS: dict[str, dict[str, str]] = {
     "cascade": {"resilient-chat/resilient-chat": "chaos-cascade/chaos-cascade"},
 }
 
+# MCP scenarios don't rewrite request bodies; they're consulted by the
+# ResilientMcpClient, which skips backends matching the active scenario.
+MCP_SCENARIOS = {"mcp-primary", "mcp-secondary", "mcp-all"}
+
+
+def activate_mcp(scenario: str) -> ChaosState:
+    if scenario not in MCP_SCENARIOS:
+        raise ValueError(f"unknown MCP scenario {scenario!r}; known: {sorted(MCP_SCENARIOS)}")
+    state = ChaosState(scenario=scenario)
+    state.save()
+    return state
+
 
 def activate(scenario: str) -> ChaosState:
     if scenario not in SCENARIOS:
