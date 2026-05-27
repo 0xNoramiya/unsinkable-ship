@@ -1,16 +1,20 @@
-# Unsinkable Ship
+# 🚢 Unsinkable Ship
+
+[![PyPI version](https://img.shields.io/pypi/v/unsinkable.svg)](https://pypi.org/project/unsinkable/)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 > Two lines of code. Your LLM agents become unsinkable.
 
 A drop-in resilience layer for any Python LLM/agent app, powered by [TrueFoundry's AI Gateway](https://www.truefoundry.com/docs/ai-gateway/intro-to-llm-gateway). When OpenAI browns out, Claude rate-limits, or your MCP server crashes — your agent keeps going. Your users never notice.
 
-Built for the DevNetwork [AI + ML] Hackathon 2025 — TrueFoundry "Resilient Agents" challenge.
+Built for the DevNetwork [AI + ML] Hackathon 2025 — **TrueFoundry "Resilient Agents"** track.
 
 ## The pitch
 
-Modern LLM apps are one provider outage away from a status-page incident. TrueFoundry's gateway already solves the *infrastructure* — fallback chains, retries, virtual MCP servers, observability. **Unsinkable** is the missing two-line bridge: it wires your existing OpenAI-SDK app to that gateway with zero refactor, and ships a chaos CLI + live dashboard so you can *prove* your resilience before production does.
+Modern LLM apps are one provider outage away from a status-page incident. TrueFoundry's gateway already solves the *infrastructure* — fallback chains, retries, virtual MCP servers, observability. **Unsinkable Ship** is the missing two-line bridge: it wires your existing OpenAI-SDK app to that gateway with zero refactor, plus a chaos CLI, live dashboard, and a sample MCP-resilient agent so you can *prove* your resilience before production does.
 
-## Install (when published)
+## Install
 
 ```bash
 pip install unsinkable
@@ -28,35 +32,41 @@ from unsinkable import OpenAI
 client = OpenAI()  # routed through TrueFoundry, with GPT-4o → Claude → Gemini fallback
 ```
 
-That's the whole change. Your `chat.completions.create(...)` calls work unchanged. If the primary model errors or browns out, the gateway transparently falls back. Your shim emits live events to the dashboard so you can watch it happen.
+That's the whole change. Your `chat.completions.create(...)` calls work unchanged. If the primary model errors or browns out, the gateway transparently falls back. The shim emits live events to the dashboard so you can watch every hop.
 
 ## See it survive chaos
 
 ```bash
-# Terminal 1 — start the dashboard
+# Terminal 1 — start the dashboard at http://localhost:8765
 unsinkable dashboard
 
-# Terminal 2 — run the scripted 14-step demo (LLM + MCP resilience)
+# Terminal 2 — run the scripted 14-step resilience tour (~45s)
 unsinkable demo
 
-# OR manually:
-unsinkable chaos break openai          # priority-0 OpenAI target fails → fallback fires
-unsinkable chaos break anthropic       # similar, breaks Anthropic at gateway
-unsinkable chaos break cascade         # both OpenAI and Anthropic down → Gemini saves you
-unsinkable chaos brownout 8            # +8s latency per request
-unsinkable chaos break mcp-primary     # MCP tool server primary skipped → secondary answers
+# Or break things manually:
+unsinkable chaos break openai          # priority-0 OpenAI target fails → Claude answers
+unsinkable chaos break anthropic       # Anthropic broken → Gemini takes over
+unsinkable chaos break cascade         # both LLM providers down → Gemini still alive
+unsinkable chaos brownout 8            # +8s latency injected per request
+unsinkable chaos break mcp-primary     # tool server primary skipped → secondary answers
 unsinkable chaos clear                 # back to normal
 ```
 
-The dashboard at <http://localhost:8765> shows every request, every retry, every fallback hop — in real time.
+The dashboard shows every request, every retry, every fallback hop — in real time, with provider-color-coded badges, a latency sparkline, and in-page chaos buttons (so judges/demo viewers don't even need a terminal).
 
-## Demo agent
+## What's in the box
 
-```bash
-python examples/research_buddy.py
-```
-
-A small MCP-powered research assistant. We use it as our chaos victim of choice.
+| | |
+|---|---|
+| `unsinkable.OpenAI` / `AsyncOpenAI` | Drop-in SDK shim with instrumented httpx transport |
+| `unsinkable doctor` | Probes gateway connectivity + lists missing Virtual Models |
+| `unsinkable dashboard` | FastAPI + SSE live UI with chaos buttons, stats, sparkline |
+| `unsinkable demo` | Scripted 14-step cinematic demo (LLM + MCP resilience) |
+| `unsinkable chaos {break,brownout,clear,status}` | Manual chaos triggers |
+| `examples/research_buddy.py` | Sample async agent with tool-calling + ResilientMcpClient |
+| `examples/mcp_servers/{search_primary,search_secondary}.py` | Two FastMCP servers we deliberately break for the demo |
+| `examples/smoke_test.py` | One-shot verification that your TF setup is wired correctly |
+| `gateway-config/*.yaml` | TrueFoundry Virtual Model manifests for `tfy apply` |
 
 ## Architecture
 
@@ -64,16 +74,17 @@ A small MCP-powered research assistant. We use it as our chaos victim of choice.
 ┌─────────────────┐    ┌──────────────────────┐    ┌────────────────────┐
 │ Your agent code │    │ unsinkable.OpenAI    │    │ TrueFoundry        │
 │ from unsinkable │───▶│ shim (SDK subclass)  │───▶│ AI Gateway         │
-│ import OpenAI   │    │ + instrumentation    │    │ • Virtual Model    │
-└─────────────────┘    └──────────────────────┘    │ • Virtual MCP      │
-        │                       │                  │ • Retries          │
-        ▼                       │                  └────────────────────┘
-┌─────────────────┐             │                            │
-│ Chaos CLI       │             ▼                            ▼
-│ (fault inject)  │      ┌────────────────┐         ┌────────────────────┐
-└─────────────────┘      │ Dashboard      │         │ Real providers     │
-                         │ (FastAPI + SSE)│         │ + MCP servers      │
-                         └────────────────┘         └────────────────────┘
+│ import OpenAI   │    │ + instrumented httpx │    │ • Virtual Models   │
+└─────────────────┘    │   transport          │    │ • Priority routing │
+        │              └──────────────────────┘    │ • Real fallback    │
+        │                       │                  └────────────────────┘
+        │                       │                            │
+        ▼                       ▼                            ▼
+┌─────────────────┐    ┌────────────────────┐       ┌────────────────────┐
+│ ResilientMcpCli │    │ Live Dashboard     │       │ OpenAI / Anthropic │
+│ • primary       │    │ FastAPI + SSE      │       │ / Google Gemini    │
+│ • secondary     │    │ + chaos buttons    │       │ providers          │
+└─────────────────┘    └────────────────────┘       └────────────────────┘
 ```
 
 ## TrueFoundry setup (~10 min, mostly `tfy apply`)
@@ -94,10 +105,26 @@ A small MCP-powered research assistant. We use it as our chaos victim of choice.
    ```
    tfy apply -f gateway-config/resilient_chat.yaml \
              -f gateway-config/chaos_openai_down.yaml \
-             -f gateway-config/chaos_anthropic_down.yaml
+             -f gateway-config/chaos_anthropic_down.yaml \
+             -f gateway-config/chaos_cascade.yaml
    ```
-5. **Verify**: `python examples/smoke_test.py` — should print "all checks passed".
+5. **Verify**: `python examples/smoke_test.py` — should print "all checks passed", or run `unsinkable doctor` for the table view.
 
-## Status
+## A note on MCP resilience
 
-Hackathon-quality. Solo dev, ~48-hour sprint. See `MEMORY.md` for design decisions.
+TrueFoundry's gateway has a **Virtual MCP Server** feature that does for tools what Virtual Models do for LLMs. We chose to ship the same pattern *client-side* in this hackathon scope — `unsinkable.mcp.ResilientMcpClient` wraps two local FastMCP servers and fails over between them, consulting the same chaos engine the LLM shim uses. That keeps the demo self-contained (no public MCP servers to deploy) while telling the identical resilience story. Migrating to TF's Virtual MCP is a config change, not a rewrite.
+
+## Run the tests
+
+```bash
+git clone https://github.com/0xNoramiya/unsinkable-ship
+cd unsinkable-ship
+python -m venv .venv && .venv/bin/pip install -e ".[dev]"
+.venv/bin/pytest -q
+```
+
+11 tests cover config, chaos engine state, and live MCP failover against the two local servers.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
