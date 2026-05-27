@@ -63,6 +63,19 @@
       <svg viewBox="0 0 24 24" width="36" height="36"><path d="M2 2 L2 16 L6 12 L9 19 L12 18 L9 11 L15 11 Z" fill="#fff" stroke="#000" stroke-width="1"/></svg>
     </div>
 
+    <!-- Chaos overlays: dual lightning + scanlines + chromatic ghosts -->
+    <div id="flash-1" class="chaos-flash"></div>
+    <div id="flash-2" class="chaos-flash"></div>
+    <div id="scanlines" class="scanlines"></div>
+    <svg id="bolt-1" class="lightning" viewBox="0 0 1920 1080" preserveAspectRatio="none">
+      <path d="M 600 0 L 540 320 L 660 320 L 540 720 L 700 380 L 580 380 L 700 60 Z"
+            fill="#ff3838" opacity="0.9" />
+    </svg>
+    <svg id="bolt-2" class="lightning" viewBox="0 0 1920 1080" preserveAspectRatio="none">
+      <path d="M 1300 0 L 1260 360 L 1380 360 L 1220 760 L 1400 420 L 1280 420 L 1380 100 Z"
+            fill="#ff3838" opacity="0.9" />
+    </svg>
+
     <style>
       [data-composition-id="scene-cascade"] {
         position: absolute; inset: 0; overflow: hidden;
@@ -166,6 +179,21 @@
         filter: drop-shadow(0 0 8px rgba(0,0,0,0.8));
         pointer-events: none;
       }
+      [data-composition-id="scene-cascade"] .chaos-flash {
+        position: absolute; inset: 0; background: #ff2828; opacity: 0;
+        pointer-events: none; mix-blend-mode: screen;
+      }
+      [data-composition-id="scene-cascade"] .scanlines {
+        position: absolute; inset: 0; opacity: 0; pointer-events: none;
+        background: repeating-linear-gradient(0deg,
+          rgba(255,40,40,0) 0px, rgba(255,40,40,0) 3px,
+          rgba(255,40,40,0.18) 3px, rgba(255,40,40,0.18) 4px);
+      }
+      [data-composition-id="scene-cascade"] .lightning {
+        position: absolute; inset: 0; width: 100%; height: 100%;
+        opacity: 0; pointer-events: none;
+        filter: drop-shadow(0 0 40px rgba(255,56,56,0.95));
+      }
     </style>
 
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
@@ -187,18 +215,46 @@
       tl.to('[data-composition-id="scene-cascade"] #cursor',
         { left: 580, top: 470, duration: 1.4, ease: "power2.inOut" }, 0.7);
 
-      // click cascade
+      // click cascade — bigger SLAM, lightning, shake
       tl.to('[data-composition-id="scene-cascade"] #btn-cascade',
-        { scale: 0.92, duration: 0.1, ease: "power2.in" }, 2.2);
+        { scale: 0.88, duration: 0.1, ease: "power2.in" }, 2.2);
       tl.to('[data-composition-id="scene-cascade"] #btn-cascade',
-        { scale: 1, boxShadow: "0 0 50px 12px rgba(255,107,107,0.6)", duration: 0.35, ease: "power3.out" }, 2.3);
+        { scale: 1, boxShadow: "0 0 80px 16px rgba(255,107,107,0.8)", duration: 0.35, ease: "power3.out" }, 2.3);
       tl.to('[data-composition-id="scene-cascade"] #btn-cascade',
         { boxShadow: "0 0 0 0 rgba(255,107,107,0)", duration: 1.4, ease: "power2.out" }, 2.65);
 
-      // banner slides down
+      // red flash + dual lightning bolts at click
+      tl.fromTo('[data-composition-id="scene-cascade"] #flash-1',
+        { opacity: 0 }, { opacity: 0.45, duration: 0.08, ease: "power4.out" }, 2.25);
+      tl.to('[data-composition-id="scene-cascade"] #flash-1',
+        { opacity: 0, duration: 0.45, ease: "power3.in" }, 2.35);
+      tl.fromTo('[data-composition-id="scene-cascade"] #bolt-1',
+        { opacity: 0, scale: 1.1 }, { opacity: 1, scale: 1, duration: 0.08 }, 2.25);
+      tl.to('[data-composition-id="scene-cascade"] #bolt-1',
+        { opacity: 0, duration: 0.3, ease: "power3.in" }, 2.35);
+
+      // camera shake (harder than break scene)
+      tl.to('[data-composition-id="scene-cascade"] .dash', {
+        keyframes: [
+          { x: -22, y: 10, duration: 0.04 },
+          { x: 18, y: -12, duration: 0.04 },
+          { x: -16, y: 8, duration: 0.04 },
+          { x: 12, y: -6, duration: 0.04 },
+          { x: -8, y: 4, duration: 0.04 },
+          { x: 0, y: 0, duration: 0.06 },
+        ],
+        ease: "power2.out"
+      }, 2.25);
+
+      tl.fromTo('[data-composition-id="scene-cascade"] #scanlines',
+        { opacity: 0 }, { opacity: 1, duration: 0.05 }, 2.25);
+      tl.to('[data-composition-id="scene-cascade"] #scanlines',
+        { opacity: 0, duration: 1.1, ease: "power2.in" }, 2.4);
+
+      // banner SLAMS down
       tl.fromTo('[data-composition-id="scene-cascade"] #banner',
-        { opacity: 0, y: -20 },
-        { opacity: 1, y: 0, duration: 0.4, ease: "expo.out" }, 2.55);
+        { opacity: 0, y: -40, scale: 1.05 },
+        { opacity: 1, y: 0, scale: 1, duration: 0.35, ease: "expo.out" }, 2.55);
 
       // cursor retreats
       tl.to('[data-composition-id="scene-cascade"] #cursor',
@@ -209,17 +265,33 @@
         { opacity: 0, y: 14 },
         { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, 3.5);
 
-      // hop 1 appears, fails
+      // hop 1 appears, fails — with lightning + flash
       tl.fromTo('[data-composition-id="scene-cascade"] #chain-1',
         { opacity: 0 }, { opacity: 1, duration: 0.3 }, 4.0);
       tl.to('[data-composition-id="scene-cascade"] #chain-1',
-        { boxShadow: "inset 0 0 40px rgba(255,107,107,0.5)", duration: 0.4, ease: "power2.out" }, 4.3);
+        { boxShadow: "inset 0 0 60px rgba(255,107,107,0.7)", duration: 0.35, ease: "power2.out" }, 4.3);
+      tl.fromTo('[data-composition-id="scene-cascade"] #bolt-1',
+        { opacity: 0, scale: 1.05 }, { opacity: 0.7, scale: 1, duration: 0.06 }, 4.3);
+      tl.to('[data-composition-id="scene-cascade"] #bolt-1',
+        { opacity: 0, duration: 0.25, ease: "power3.in" }, 4.4);
+      tl.fromTo('[data-composition-id="scene-cascade"] #flash-1',
+        { opacity: 0 }, { opacity: 0.25, duration: 0.05 }, 4.3);
+      tl.to('[data-composition-id="scene-cascade"] #flash-1',
+        { opacity: 0, duration: 0.3, ease: "power3.in" }, 4.4);
 
-      // hop 2 appears, fails
+      // hop 2 appears, fails — second lightning
       tl.fromTo('[data-composition-id="scene-cascade"] #chain-2',
         { opacity: 0 }, { opacity: 1, duration: 0.3 }, 5.2);
       tl.to('[data-composition-id="scene-cascade"] #chain-2',
-        { boxShadow: "inset 0 0 40px rgba(255,107,107,0.5)", duration: 0.4, ease: "power2.out" }, 5.5);
+        { boxShadow: "inset 0 0 60px rgba(255,107,107,0.7)", duration: 0.35, ease: "power2.out" }, 5.5);
+      tl.fromTo('[data-composition-id="scene-cascade"] #bolt-2',
+        { opacity: 0, scale: 1.05 }, { opacity: 0.75, scale: 1, duration: 0.06 }, 5.5);
+      tl.to('[data-composition-id="scene-cascade"] #bolt-2',
+        { opacity: 0, duration: 0.25, ease: "power3.in" }, 5.6);
+      tl.fromTo('[data-composition-id="scene-cascade"] #flash-2',
+        { opacity: 0 }, { opacity: 0.25, duration: 0.05 }, 5.5);
+      tl.to('[data-composition-id="scene-cascade"] #flash-2',
+        { opacity: 0, duration: 0.3, ease: "power3.in" }, 5.6);
 
       // hop 3 — Gemini answers, with triumphant glow
       tl.fromTo('[data-composition-id="scene-cascade"] #chain-3',
