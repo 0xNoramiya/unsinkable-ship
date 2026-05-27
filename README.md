@@ -16,7 +16,7 @@ Modern LLM apps are one provider outage away from a status-page incident. TrueFo
 
 ## Try it without installing
 
-**Live dashboard demo:** [unsinkable-demo.vercel.app](https://unsinkable-demo.vercel.app) — pre-recorded interactive mirror, no install needed.
+**Live dashboard demo:** [web-demo-ebon-iota.vercel.app](https://web-demo-ebon-iota.vercel.app) — pre-recorded interactive mirror, no install needed.
 
 ## Install
 
