@@ -316,18 +316,17 @@ unsinkable-ship/
 ├── examples/                   # Sample agent and MCP servers
 ├── gateway-config/             # TrueFoundry Virtual Model manifests
 ├── tests/                      # pytest suite (config + chaos + MCP)
-├── web-demo/                   # Static client-side dashboard mirror (Vercel)
-└── video/trailer/              # HyperFrames composition for the project trailer
+└── web-demo/                   # Static client-side dashboard mirror (Vercel)
 ```
 
 ---
 
 ## Acknowledgments
 
-Built for the **DevNetwork [AI + ML] Hackathon 2025**, TrueFoundry "Resilient
-Agents" track. Powered by [TrueFoundry's AI Gateway](https://www.truefoundry.com/docs/ai-gateway/intro-to-llm-gateway),
-the [OpenAI Python SDK](https://github.com/openai/openai-python), and the
-[Model Context Protocol](https://modelcontextprotocol.io/).
+Built on [TrueFoundry's AI Gateway](https://www.truefoundry.com/docs/ai-gateway/intro-to-llm-gateway).
+Adapters wrap the [OpenAI Python SDK](https://github.com/openai/openai-python)
+and the [Anthropic Python SDK](https://github.com/anthropics/anthropic-sdk-python).
+Tool-side resilience uses the [Model Context Protocol](https://modelcontextprotocol.io/).
 
 ---
 
