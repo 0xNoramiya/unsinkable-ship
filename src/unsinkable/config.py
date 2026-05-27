@@ -16,6 +16,14 @@ class Settings(BaseSettings):
     tfy_gateway_base_url: str | None = None
     unsinkable_default_model: str = "resilient-chat/resilient-chat"
     unsinkable_dashboard_url: str | None = "http://127.0.0.1:8765"
+    # Production guardrail. When true, the chaos engine becomes a no-op:
+    # body rewrites and brownouts are skipped even if a stale state file exists.
+    # Set UNSINKABLE_DISABLE_CHAOS=1 in any production environment.
+    unsinkable_disable_chaos: bool = False
+    # OpenTelemetry endpoint (OTLP/HTTP). When set, request events are also
+    # exported as spans via the OTLP exporter.
+    otel_exporter_otlp_endpoint: str | None = None
+    otel_service_name: str = "unsinkable"
 
     @property
     def gateway_base_url(self) -> str:

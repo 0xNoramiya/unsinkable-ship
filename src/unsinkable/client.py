@@ -170,7 +170,11 @@ def _wire(kwargs: dict[str, Any], async_mode: bool) -> dict[str, Any]:
     kwargs.setdefault("base_url", settings.openai_base_url)
     kwargs.setdefault("api_key", settings.tfy_api_key)
     if "http_client" not in kwargs:
-        sink = make_sink(settings.unsinkable_dashboard_url)
+        sink = make_sink(
+            dashboard_url=settings.unsinkable_dashboard_url,
+            otel_endpoint=settings.otel_exporter_otlp_endpoint,
+            otel_service_name=settings.otel_service_name,
+        )
         transport_cls = _InstrumentedAsyncTransport if async_mode else _InstrumentedSyncTransport
         client_cls = httpx.AsyncClient if async_mode else httpx.Client
         kwargs["http_client"] = client_cls(transport=transport_cls(sink))

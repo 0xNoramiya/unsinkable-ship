@@ -89,7 +89,41 @@ class HttpEventSink:
         self._worker.join(timeout=0.5)
 
 
-def make_sink(dashboard_url: str | None) -> EventSink:
-    if not dashboard_url:
+class CompositeSink:
+    """Fan-out a single event to multiple sinks. Used when both dashboard and
+    OpenTelemetry are configured."""
+
+    def __init__(self, sinks: list[EventSink]) -> None:
+        self._sinks = sinks
+
+    def emit(self, event: RequestEvent) -> None:
+        for s in self._sinks:
+            try:
+                s.emit(event)
+            except Exception as e:  # noqa: BLE001
+                log.debug("fan-out sink failed: %s", e)
+
+
+def make_sink(
+    dashboard_url: str | None,
+    otel_endpoint: str | None = None,
+    otel_service_name: str = "unsinkable",
+) -> EventSink:
+    sinks: list[EventSink] = []
+    if dashboard_url:
+        sinks.append(HttpEventSink(dashboard_url))
+    if otel_endpoint:
+        try:
+            from unsinkable.otel_sink import OtelEventSink
+            sinks.append(OtelEventSink(otel_endpoint, otel_service_name))
+        except ImportError as e:
+            log.warning(
+                "OTEL_EXPORTER_OTLP_ENDPOINT set but opentelemetry packages "
+                "are not installed (%s). Install with `pip install unsinkable[otel]`.",
+                e,
+            )
+    if not sinks:
         return NullSink()
-    return HttpEventSink(dashboard_url)
+    if len(sinks) == 1:
+        return sinks[0]
+    return CompositeSink(sinks)

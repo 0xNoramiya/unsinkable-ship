@@ -54,10 +54,17 @@ async def chaos_status() -> dict:
 
 @app.post("/api/chaos/break/{provider}")
 async def chaos_break(provider: str) -> dict:
-    from unsinkable.chaos import MCP_SCENARIOS, activate_mcp
+    from unsinkable.chaos import (
+        BODY_OVERRIDE_SCENARIOS,
+        MCP_SCENARIOS,
+        activate_body_override,
+        activate_mcp,
+    )
 
     if provider in MCP_SCENARIOS:
         state = activate_mcp(provider)
+    elif provider in BODY_OVERRIDE_SCENARIOS:
+        state = activate_body_override(provider)
     elif provider in SCENARIOS:
         state = activate(provider)
     else:
@@ -202,7 +209,10 @@ _HTML = """<!doctype html>
     <div class="stat"><div class="num" id="s-ok" style="color:#7fe0a3">0</div><div class="lbl">OK</div></div>
     <div class="stat"><div class="num" id="s-fb" style="color:#f0c060">0</div><div class="lbl">Fallback</div></div>
     <div class="stat"><div class="num" id="s-err" style="color:#f08080">0</div><div class="lbl">Error</div></div>
-    <div class="stat"><div class="num" id="s-avg">–</div><div class="lbl">Avg latency</div></div>
+    <div class="stat"><div class="num" id="s-avg">–</div><div class="lbl">Avg</div></div>
+    <div class="stat"><div class="num" id="s-p50">–</div><div class="lbl">p50</div></div>
+    <div class="stat"><div class="num" id="s-p95">–</div><div class="lbl">p95</div></div>
+    <div class="stat"><div class="num" id="s-p99">–</div><div class="lbl">p99</div></div>
     <div class="stat"><div class="num" id="s-tokens">0</div><div class="lbl">Tokens</div></div>
     <div class="stat" style="flex:1; min-width:200px">
       <canvas id="spark" width="240" height="48" style="display:block; width:100%; height:48px"></canvas>
@@ -217,6 +227,8 @@ _HTML = """<!doctype html>
     <button class="danger" onclick="chaos('break/openai')">Break OpenAI</button>
     <button class="danger" onclick="chaos('break/anthropic')">Break Anthropic</button>
     <button class="danger" onclick="chaos('break/cascade')">Cascade (both)</button>
+    <button class="danger" onclick="chaos('break/rate-limit')">Rate-limit OpenAI</button>
+    <button class="warn" onclick="chaos('break/truncate')">Truncate (max_tokens=1)</button>
     <button class="danger" onclick="chaos('break/mcp-primary')">Break MCP primary</button>
     <button class="warn" onclick="chaos('brownout/3')">Brownout +3s</button>
     <button class="warn" onclick="chaos('brownout/8')">Brownout +8s</button>
@@ -278,6 +290,12 @@ async function refreshChaos() {
   }
 }
 
+function percentile(sortedArr, p) {
+  if (!sortedArr.length) return null;
+  const idx = Math.min(sortedArr.length - 1, Math.floor((p / 100) * sortedArr.length));
+  return sortedArr[idx];
+}
+
 function updateStats() {
   document.getElementById('s-total').textContent = stats.total;
   document.getElementById('s-ok').textContent = stats.ok;
@@ -285,9 +303,13 @@ function updateStats() {
   document.getElementById('s-err').textContent = stats.err;
   document.getElementById('s-tokens').textContent = stats.tokens;
   if (stats.latencies.length > 0) {
-    const recent = stats.latencies.slice(-20);
-    const avg = recent.reduce((a,b)=>a+b,0) / recent.length;
+    const recent = stats.latencies.slice(-50);
+    const sorted = [...recent].sort((a, b) => a - b);
+    const avg = recent.reduce((a, b) => a + b, 0) / recent.length;
     document.getElementById('s-avg').textContent = avg.toFixed(0) + 'ms';
+    document.getElementById('s-p50').textContent = percentile(sorted, 50).toFixed(0) + 'ms';
+    document.getElementById('s-p95').textContent = percentile(sorted, 95).toFixed(0) + 'ms';
+    document.getElementById('s-p99').textContent = percentile(sorted, 99).toFixed(0) + 'ms';
   }
   drawSpark();
 }

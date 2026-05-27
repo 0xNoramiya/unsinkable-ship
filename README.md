@@ -40,7 +40,9 @@ so that provider outages, brownouts, and MCP tool failures fall back transparent
 ## Installation
 
 ```bash
-pip install unsinkable
+pip install unsinkable                # core + OpenAI / Anthropic adapters
+pip install "unsinkable[otel]"        # adds the OpenTelemetry exporter
+pip install "unsinkable[codemod]"     # adds libcst for `unsinkable wire`
 ```
 
 Requires **Python 3.10+** and a [TrueFoundry](https://www.truefoundry.com) tenant
@@ -74,11 +76,13 @@ outputs, etc.) work unmodified.
 | Component | Purpose |
 | --- | --- |
 | `unsinkable.OpenAI` / `AsyncOpenAI` | Drop-in replacement for `openai.OpenAI` and `openai.AsyncOpenAI`. Injects the gateway base URL, authentication, and an instrumented `httpx` transport that captures resolved-model, latency, token usage, and fallback metadata. |
-| `unsinkable.mcp.ResilientMcpClient` | Wraps one or more [MCP](https://modelcontextprotocol.io/) servers and routes tool calls with priority-order failover. Honors the same chaos rules as the LLM shim. |
-| `unsinkable doctor` | Verifies gateway connectivity, lists connected providers, and checks that required Virtual Models exist. |
-| `unsinkable dashboard` | Local FastAPI + SSE server that streams request events to a browser UI. Includes in-page chaos controls, latency sparkline, token counter, and provider-color-coded badges. |
+| `unsinkable.Anthropic` / `AsyncAnthropic` | Drop-in replacement for `anthropic.Anthropic`. Translates the Messages API to OpenAI Chat Completions in flight, so the gateway sees a uniform request shape. |
+| `unsinkable.mcp.ResilientMcpClient` | Wraps one or more [MCP](https://modelcontextprotocol.io/) servers — local stdio subprocesses **or** remote Streamable-HTTP endpoints (e.g. TrueFoundry's Virtual MCP Server) — and routes tool calls with priority-order failover. Honors the same chaos rules as the LLM shim. |
+| `unsinkable doctor` | Verifies gateway connectivity, lists connected providers, surfaces the production-guardrail flag, and checks that required Virtual Models exist. |
+| `unsinkable dashboard` | Local FastAPI + SSE server that streams request events to a browser UI. Includes in-page chaos controls, latency sparkline, **p50/p95/p99 percentiles**, token counter, and provider-color-coded badges. |
 | `unsinkable demo` | Scripted 14-step resilience tour (~45s) covering LLM fallback, brownouts, cascade outages, and MCP failover. |
-| `unsinkable chaos {break,brownout,clear,status}` | Manual chaos triggers persisted via a temp-file state store so any process consulting the shim sees the active rules. |
+| `unsinkable wire <target>` | AST codemod that rewrites `from openai import ...` and `from anthropic import ...` to `from unsinkable import ...` across a project. Supports `--dry-run` for diff preview. |
+| `unsinkable chaos {break,brownout,clear,status}` | Manual chaos triggers persisted via a temp-file state store so any process consulting the shim sees the active rules. Scenarios: `openai`, `anthropic`, `cascade`, `rate-limit`, `truncate`, `mcp-{primary,secondary,all}`. |
 
 ---
 
@@ -93,6 +97,9 @@ Environment variables (a `.env.example` template is shipped in the repository):
 | `TFY_GATEWAY_BASE_URL` | no | `$TFY_HOST/api/llm` | Override for the OpenAI-compatible gateway endpoint. |
 | `UNSINKABLE_DEFAULT_MODEL` | no | `resilient-chat/resilient-chat` | Model name used when callers omit one. |
 | `UNSINKABLE_DASHBOARD_URL` | no | `http://127.0.0.1:8765` | Where the shim posts request events. Set to an empty string to disable instrumentation. |
+| `UNSINKABLE_DISABLE_CHAOS` | no | `0` | Production guardrail. When `1` / `true` / `on`, all chaos engine behavior (body rewrites, brownouts) becomes a no-op even if a stale state file is present. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | no | unset | If set, request events are also exported as OTLP/HTTP spans. Requires `pip install unsinkable[otel]`. |
+| `OTEL_SERVICE_NAME` | no | `unsinkable` | Service name attribute on exported spans. |
 
 Settings are loaded with [`pydantic-settings`](https://docs.pydantic.dev/latest/concepts/pydantic_settings/)
 from `.env` or the process environment.

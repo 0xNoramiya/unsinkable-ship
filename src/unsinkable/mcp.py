@@ -1,8 +1,10 @@
-"""Client-side MCP resilience. Wraps a list of MCP server backends and tries
-them in priority order on every tool call, skipping any marked broken by the
-chaos engine. Mirrors how TrueFoundry's Virtual MCP Server works at the
-gateway, but happens in-process — useful when you can't put the MCP servers
-behind a reachable URL."""
+"""Client-side MCP resilience. Wraps a list of MCP server backends (stdio OR
+remote HTTP/SSE) and tries them in priority order on every tool call, skipping
+any marked broken by the chaos engine.
+
+Mirrors how TrueFoundry's Virtual MCP Server works at the gateway, but happens
+in-process — useful for self-contained demos and as a fallback layer in front
+of a Virtual MCP Server endpoint."""
 
 from __future__ import annotations
 
@@ -10,22 +12,44 @@ import asyncio
 import time
 from contextlib import AsyncExitStack
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 from unsinkable.chaos import ChaosState
-from unsinkable.events import RequestEvent, make_sink
 from unsinkable.config import get_settings
+from unsinkable.events import RequestEvent, make_sink
 
 
 @dataclass
 class McpBackend:
+    """One MCP server backend. Either stdio (local subprocess) or http (remote
+    Streamable-HTTP MCP endpoint, e.g. TrueFoundry's Virtual MCP Server).
+
+    Positional argument order preserved for backward compatibility:
+    `McpBackend(name, command, args)` always means a stdio backend."""
+
     name: str
-    command: str
+    # stdio fields (positional for backwards compat with v0.1.0):
+    command: str = ""
     args: list[str] = field(default_factory=list)
     env: dict[str, str] | None = None
+    # http fields:
+    url: str = ""
+    headers: dict[str, str] | None = None
+    # Discriminator — comes last so positional construction of stdio backends
+    # keeps working from existing code.
+    kind: Literal["stdio", "http"] = "stdio"
+
+    @classmethod
+    def stdio(cls, name: str, command: str, args: list[str] | None = None,
+              env: dict[str, str] | None = None) -> "McpBackend":
+        return cls(name=name, kind="stdio", command=command, args=args or [], env=env)
+
+    @classmethod
+    def http(cls, name: str, url: str, headers: dict[str, str] | None = None) -> "McpBackend":
+        return cls(name=name, kind="http", url=url, headers=headers)
 
 
 class ResilientMcpClient:
@@ -42,18 +66,35 @@ class ResilientMcpClient:
         self._stack: AsyncExitStack | None = None
         self._sessions: dict[str, ClientSession] = {}
         settings = get_settings()
-        self._sink = make_sink(settings.unsinkable_dashboard_url)
+        self._sink = make_sink(
+            dashboard_url=settings.unsinkable_dashboard_url,
+            otel_endpoint=settings.otel_exporter_otlp_endpoint,
+            otel_service_name=settings.otel_service_name,
+        )
 
     async def __aenter__(self) -> "ResilientMcpClient":
         self._stack = AsyncExitStack()
         await self._stack.__aenter__()
         for b in self.backends:
-            params = StdioServerParameters(command=b.command, args=b.args, env=b.env)
-            read, write = await self._stack.enter_async_context(stdio_client(params))
-            session = await self._stack.enter_async_context(ClientSession(read, write))
+            session = await self._connect(b)
             await session.initialize()
             self._sessions[b.name] = session
         return self
+
+    async def _connect(self, b: McpBackend) -> ClientSession:
+        assert self._stack is not None
+        if b.kind == "stdio":
+            params = StdioServerParameters(command=b.command, args=b.args, env=b.env)
+            read, write = await self._stack.enter_async_context(stdio_client(params))
+        elif b.kind == "http":
+            # Streamable-HTTP transport for remote MCP servers (TF Virtual MCP etc.)
+            from mcp.client.streamable_http import streamablehttp_client
+            read, write, _ = await self._stack.enter_async_context(
+                streamablehttp_client(b.url, headers=b.headers)
+            )
+        else:  # pragma: no cover — Literal makes this unreachable
+            raise ValueError(f"unknown backend kind {b.kind!r}")
+        return await self._stack.enter_async_context(ClientSession(read, write))
 
     async def __aexit__(self, *exc: Any) -> None:
         if self._stack is not None:
@@ -83,7 +124,7 @@ class ResilientMcpClient:
                 self._sink.emit(RequestEvent(
                     kind="mcp",
                     method="CALL",
-                    url=f"mcp://{backend.name}/{name}",
+                    url=f"mcp+{backend.kind}://{backend.name}/{name}",
                     requested_model=backend.name,
                     resolved_model=backend.name,
                     status_code=200,
@@ -100,7 +141,7 @@ class ResilientMcpClient:
                 self._sink.emit(RequestEvent(
                     kind="mcp",
                     method="CALL",
-                    url=f"mcp://{backend.name}/{name}",
+                    url=f"mcp+{backend.kind}://{backend.name}/{name}",
                     requested_model=backend.name,
                     latency_ms=latency_ms,
                     error=last_error,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 
 import click
@@ -73,6 +74,8 @@ def doctor() -> None:
         table.add_row("Gateway reachable", f"[red]error: {e}[/red]")
 
     table.add_row("Chaos state", _chaos_status_str())
+    if os.environ.get("UNSINKABLE_DISABLE_CHAOS", "0").lower() in {"1", "true", "yes", "on"}:
+        table.add_row("Production guard", "[green]UNSINKABLE_DISABLE_CHAOS=1[/green] (chaos no-op)")
     console.print(table)
 
 
@@ -103,25 +106,74 @@ def demo() -> None:
     run_demo()
 
 
+@main.command()
+@click.argument("target", type=click.Path(exists=True, file_okay=True, dir_okay=True))
+@click.option("--dry-run", is_flag=True, help="Print diffs without writing.")
+@click.option("--quiet", is_flag=True, help="Suppress per-file output (summary only).")
+def wire(target: str, dry_run: bool, quiet: bool) -> None:
+    """Rewrite OpenAI/Anthropic SDK imports in TARGET to point at unsinkable."""
+    from pathlib import Path
+
+    from unsinkable.wire import wire_path
+
+    results = wire_path(Path(target), dry_run=dry_run)
+    rewritten = [r for r in results if r.rewritten]
+    warned = [r for r in results if r.warnings]
+    errored = [r for r in results if r.error]
+    for r in results:
+        if r.error:
+            console.print(f"[red]error[/red] {r.path}: {r.error}")
+            continue
+        if r.rewritten and not quiet:
+            console.print(f"[green]{'would rewrite' if dry_run else 'rewrote'}[/green] {r.path}")
+            if dry_run:
+                console.print(f"[dim]{r.diff}[/dim]")
+        for w in r.warnings:
+            console.print(f"[yellow]warn[/yellow] {r.path}: {w}")
+    verb = "Would rewrite" if dry_run else "Rewrote"
+    console.print(
+        f"\n[bold]{verb}[/bold] {len(rewritten)} file(s); "
+        f"[yellow]{len(warned)}[/yellow] with warnings; "
+        f"[red]{len(errored)}[/red] errored."
+    )
+
+
 @main.group()
 def chaos() -> None:
     """Inject failures into your LLM/MCP traffic."""
 
 
 @chaos.command("break")
-@click.argument("provider", type=click.Choice(
-    ["openai", "anthropic", "cascade", "mcp-primary", "mcp-secondary", "mcp-all"]
-))
+@click.argument("provider", type=click.Choice([
+    "openai", "anthropic", "cascade", "rate-limit",
+    "truncate",
+    "mcp-primary", "mcp-secondary", "mcp-all",
+]))
 def chaos_break(provider: str) -> None:
-    """Break a provider for the next request. LLM scenarios trigger TF
-    gateway-side fallback; mcp-* scenarios are honored by ResilientMcpClient."""
-    from unsinkable.chaos import MCP_SCENARIOS, STATE_PATH, activate, activate_mcp
+    """Break a provider or behavior for the next request. LLM scenarios trigger
+    TF gateway-side fallback; body-override scenarios mutate the request payload;
+    mcp-* scenarios are honored by ResilientMcpClient."""
+    from unsinkable.chaos import (
+        BODY_OVERRIDE_SCENARIOS,
+        MCP_SCENARIOS,
+        STATE_PATH,
+        activate,
+        activate_body_override,
+        activate_mcp,
+    )
 
     if provider in MCP_SCENARIOS:
         state = activate_mcp(provider)
         console.print(
             f"[red bold]MCP CHAOS[/red bold] scenario active: [bold]{state.scenario}[/bold]"
         )
+    elif provider in BODY_OVERRIDE_SCENARIOS:
+        state = activate_body_override(provider)
+        console.print(
+            f"[red bold]CHAOS[/red bold] body-override scenario: [bold]{state.scenario}[/bold]"
+        )
+        for k, v in state.body_overrides.items():
+            console.print(f"  [dim]{k}[/dim] → [yellow]{v}[/yellow]")
     else:
         state = activate(provider)
         console.print(
