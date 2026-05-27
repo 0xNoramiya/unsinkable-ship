@@ -5,11 +5,24 @@ build-backend = "hatchling.build"
 [project]
 name = "unsinkable"
 version = "0.1.0"
-description = "Drop-in resilience layer for LLM apps. Two lines of code, plus a chaos CLI and live dashboard, all powered by TrueFoundry's AI Gateway."
+description = "Drop-in resilience layer for LLM apps via TrueFoundry's AI Gateway. Two lines of code; live chaos demo; client-side MCP failover."
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = { file = "LICENSE" }
 authors = [{ name = "Unsinkable Ship" }]
+keywords = ["llm", "openai", "anthropic", "truefoundry", "resilience", "chaos", "mcp", "ai-gateway", "fallback"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Distributed Computing",
+]
 dependencies = [
     "openai>=1.40.0",
     "httpx>=0.27.0",
@@ -26,13 +39,35 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "ruff>=0.5.0"]
+dev = ["pytest>=8.0", "ruff>=0.5.0", "build>=1.2.0", "twine>=5.0.0"]
 
 [project.scripts]
 unsinkable = "unsinkable.cli:main"
 
+[project.urls]
+Homepage = "https://github.com/0xNoramiya/unsinkable-ship"
+Repository = "https://github.com/0xNoramiya/unsinkable-ship"
+Issues = "https://github.com/0xNoramiya/unsinkable-ship/issues"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/unsinkable"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/unsinkable",
+    "README.md",
+    "LICENSE",
+    "pyproject.toml",
+]
+exclude = [
+    "tests/",
+    "examples/",
+    "gateway-config/",
+    ".env*",
+    ".venv/",
+    "dist/",
+    ".claude/",
+]
 
 [tool.ruff]
 line-length = 100
