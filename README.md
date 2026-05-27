@@ -1,134 +1,329 @@
-# 🚢 Unsinkable Ship
+# Unsinkable Ship
 
 [![PyPI version](https://img.shields.io/pypi/v/unsinkable.svg)](https://pypi.org/project/unsinkable/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Live Demo](https://img.shields.io/badge/demo-vercel-black.svg)](https://web-demo-ebon-iota.vercel.app/)
 
-> Two lines of code. Your LLM agents become unsinkable.
+A drop-in resilience layer for Python LLM applications. `unsinkable` routes any
+[OpenAI-SDK](https://github.com/openai/openai-python)-compatible client through
+[TrueFoundry's AI Gateway](https://www.truefoundry.com/docs/ai-gateway/intro-to-llm-gateway)
+so that provider outages, brownouts, and MCP tool failures fall back transparently.
 
-A drop-in resilience layer for any Python LLM/agent app, powered by [TrueFoundry's AI Gateway](https://www.truefoundry.com/docs/ai-gateway/intro-to-llm-gateway). When OpenAI browns out, Claude rate-limits, or your MCP server crashes — your agent keeps going. Your users never notice.
+- **Live demo**: <https://web-demo-ebon-iota.vercel.app/>
+- **Package**: <https://pypi.org/project/unsinkable/>
+- **Source**: <https://github.com/0xNoramiya/unsinkable-ship>
 
-Built for the DevNetwork [AI + ML] Hackathon 2025 — **TrueFoundry "Resilient Agents"** track.
+---
 
-## The pitch
+## Table of Contents
 
-Modern LLM apps are one provider outage away from a status-page incident. TrueFoundry's gateway already solves the *infrastructure* — fallback chains, retries, virtual MCP servers, observability. **Unsinkable Ship** is the missing two-line bridge: it wires your existing OpenAI-SDK app to that gateway with zero refactor, plus a chaos CLI, live dashboard, and a sample MCP-resilient agent so you can *prove* your resilience before production does.
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Features](#features)
+- [Configuration](#configuration)
+- [Usage](#usage)
+  - [Synchronous and asynchronous clients](#synchronous-and-asynchronous-clients)
+  - [Live dashboard](#live-dashboard)
+  - [Chaos engineering](#chaos-engineering)
+  - [Resilient MCP client](#resilient-mcp-client)
+  - [Scripted demo](#scripted-demo)
+- [TrueFoundry Setup](#truefoundry-setup)
+- [Architecture](#architecture)
+- [Development](#development)
+- [Project Layout](#project-layout)
+- [Acknowledgments](#acknowledgments)
+- [License](#license)
 
-## Try it without installing
+---
 
-**Live dashboard demo:** [web-demo-ebon-iota.vercel.app](https://web-demo-ebon-iota.vercel.app) — pre-recorded interactive mirror, no install needed.
-
-## Install
+## Installation
 
 ```bash
 pip install unsinkable
 ```
 
-## Wire it in (2 lines)
+Requires **Python 3.10+** and a [TrueFoundry](https://www.truefoundry.com) tenant
+with the AI Gateway enabled and at least one connected provider integration
+(OpenAI, Anthropic, Google Gemini, etc.).
+
+---
+
+## Quick Start
 
 ```python
-# Before
-from openai import OpenAI
-client = OpenAI()
-
-# After
 from unsinkable import OpenAI
-client = OpenAI()  # routed through TrueFoundry, with GPT-4o → Claude → Gemini fallback
+
+client = OpenAI()  # base_url, api_key, and observability injected from env
+
+response = client.chat.completions.create(
+    model="resilient-chat/resilient-chat",
+    messages=[{"role": "user", "content": "Hello"}],
+)
+print(response.choices[0].message.content)
 ```
 
-That's the whole change. Your `chat.completions.create(...)` calls work unchanged. If the primary model errors or browns out, the gateway transparently falls back. The shim emits live events to the dashboard so you can watch every hop.
+That is the complete change required to wrap an existing OpenAI-SDK call site.
+All other methods (`embeddings`, `images`, streaming, tool use, structured
+outputs, etc.) work unmodified.
 
-## See it survive chaos
+---
+
+## Features
+
+| Component | Purpose |
+| --- | --- |
+| `unsinkable.OpenAI` / `AsyncOpenAI` | Drop-in replacement for `openai.OpenAI` and `openai.AsyncOpenAI`. Injects the gateway base URL, authentication, and an instrumented `httpx` transport that captures resolved-model, latency, token usage, and fallback metadata. |
+| `unsinkable.mcp.ResilientMcpClient` | Wraps one or more [MCP](https://modelcontextprotocol.io/) servers and routes tool calls with priority-order failover. Honors the same chaos rules as the LLM shim. |
+| `unsinkable doctor` | Verifies gateway connectivity, lists connected providers, and checks that required Virtual Models exist. |
+| `unsinkable dashboard` | Local FastAPI + SSE server that streams request events to a browser UI. Includes in-page chaos controls, latency sparkline, token counter, and provider-color-coded badges. |
+| `unsinkable demo` | Scripted 14-step resilience tour (~45s) covering LLM fallback, brownouts, cascade outages, and MCP failover. |
+| `unsinkable chaos {break,brownout,clear,status}` | Manual chaos triggers persisted via a temp-file state store so any process consulting the shim sees the active rules. |
+
+---
+
+## Configuration
+
+Environment variables (a `.env.example` template is shipped in the repository):
+
+| Variable | Required | Default | Description |
+| --- | :-: | --- | --- |
+| `TFY_API_KEY` | yes | — | TrueFoundry Personal Access Token. |
+| `TFY_HOST` | yes | — | Tenant URL, e.g. `https://<tenant>.truefoundry.cloud`. |
+| `TFY_GATEWAY_BASE_URL` | no | `$TFY_HOST/api/llm` | Override for the OpenAI-compatible gateway endpoint. |
+| `UNSINKABLE_DEFAULT_MODEL` | no | `resilient-chat/resilient-chat` | Model name used when callers omit one. |
+| `UNSINKABLE_DASHBOARD_URL` | no | `http://127.0.0.1:8765` | Where the shim posts request events. Set to an empty string to disable instrumentation. |
+
+Settings are loaded with [`pydantic-settings`](https://docs.pydantic.dev/latest/concepts/pydantic_settings/)
+from `.env` or the process environment.
+
+---
+
+## Usage
+
+### Synchronous and asynchronous clients
+
+```python
+from unsinkable import OpenAI, AsyncOpenAI
+
+sync_client = OpenAI()
+async_client = AsyncOpenAI()
+
+# Both expose the full openai-python surface area.
+response = sync_client.chat.completions.create(
+    model="resilient-chat/resilient-chat",
+    messages=[{"role": "user", "content": "ping"}],
+)
+```
+
+The shim is a subclass of `openai.OpenAI` / `openai.AsyncOpenAI`; any
+constructor argument supported by the upstream SDK is supported here. When
+`http_client` is provided explicitly, instrumentation is skipped and the caller
+takes full control of transport behavior.
+
+### Live dashboard
 
 ```bash
-# Terminal 1 — start the dashboard at http://localhost:8765
-unsinkable dashboard
-
-# Terminal 2 — run the scripted 14-step resilience tour (~45s)
-unsinkable demo
-
-# Or break things manually:
-unsinkable chaos break openai          # priority-0 OpenAI target fails → Claude answers
-unsinkable chaos break anthropic       # Anthropic broken → Gemini takes over
-unsinkable chaos break cascade         # both LLM providers down → Gemini still alive
-unsinkable chaos brownout 8            # +8s latency injected per request
-unsinkable chaos break mcp-primary     # tool server primary skipped → secondary answers
-unsinkable chaos clear                 # back to normal
+unsinkable dashboard           # listens on http://127.0.0.1:8765 by default
 ```
 
-The dashboard shows every request, every retry, every fallback hop — in real time, with provider-color-coded badges, a latency sparkline, and in-page chaos buttons (so judges/demo viewers don't even need a terminal).
+Open the URL in a browser. The shim's instrumented transport posts every
+request to `/events`; the dashboard streams them to the page via Server-Sent
+Events and renders them in a live-updating table with provider badges, a
+latency sparkline, and stats counters.
 
-## What's in the box
+The dashboard also exposes `POST /api/chaos/{break,brownout,clear}` endpoints
+and surfaces them as buttons in the UI, so demos can be driven entirely from
+the browser.
 
-| | |
-|---|---|
-| `unsinkable.OpenAI` / `AsyncOpenAI` | Drop-in SDK shim with instrumented httpx transport |
-| `unsinkable doctor` | Probes gateway connectivity + lists missing Virtual Models |
-| `unsinkable dashboard` | FastAPI + SSE live UI with chaos buttons, stats, sparkline |
-| `unsinkable demo` | Scripted 14-step cinematic demo (LLM + MCP resilience) |
-| `unsinkable chaos {break,brownout,clear,status}` | Manual chaos triggers |
-| `examples/research_buddy.py` | Sample async agent with tool-calling + ResilientMcpClient |
-| `examples/mcp_servers/{search_primary,search_secondary}.py` | Two FastMCP servers we deliberately break for the demo |
-| `examples/smoke_test.py` | One-shot verification that your TF setup is wired correctly |
-| `gateway-config/*.yaml` | TrueFoundry Virtual Model manifests for `tfy apply` |
+### Chaos engineering
+
+```bash
+unsinkable chaos break openai          # gateway-side OpenAI fallback
+unsinkable chaos break anthropic       # gateway-side Anthropic fallback
+unsinkable chaos break cascade         # both providers down; gateway routes to Gemini
+unsinkable chaos break mcp-primary     # primary MCP server skipped client-side
+unsinkable chaos brownout 5            # adds 5 s of latency to every request
+unsinkable chaos status                # show active scenario
+unsinkable chaos clear                 # remove all active rules
+```
+
+Each scenario maps to a pre-created TrueFoundry Virtual Model whose
+priority-0 target is deliberately broken; the shim rewrites the outgoing
+`model` field so the gateway hits the broken target, fails for real, and
+falls back through its declared priority chain.
+
+### Resilient MCP client
+
+```python
+import asyncio
+from unsinkable.mcp import ResilientMcpClient, McpBackend
+
+backends = [
+    McpBackend("primary",   "python", ["servers/primary.py"]),
+    McpBackend("secondary", "python", ["servers/secondary.py"]),
+]
+
+async def main():
+    async with ResilientMcpClient(backends) as mcp:
+        result = await mcp.call_tool("web_search", {"query": "rust 1.80"})
+    print(result)
+
+asyncio.run(main())
+```
+
+`ResilientMcpClient` connects to each backend over `stdio` at context-manager
+entry. Tool calls are tried in declaration order; backends matching an active
+`mcp-*` chaos scenario are skipped, and exceptions from one backend trigger an
+automatic attempt on the next.
+
+### Scripted demo
+
+```bash
+# Terminal 1
+unsinkable dashboard
+
+# Terminal 2
+unsinkable demo
+```
+
+The `demo` command runs a 14-step scenario covering the happy path, a single
+provider outage with fallback to Claude, a brownout, a cascade outage with
+fallback to Gemini, MCP-layer failover, and recovery. Pair it with the
+dashboard for the full visual story.
+
+---
+
+## TrueFoundry Setup
+
+The repository ships YAML manifests for the four Virtual Models referenced by
+the chaos scenarios. Setup takes roughly ten minutes.
+
+1. **Tenant + token.** Sign in at `https://<tenant>.truefoundry.cloud` and create
+   a Personal Access Token under **Access → Personal Access Tokens**. Copy
+   `.env.example` to `.env` and populate `TFY_API_KEY` and `TFY_HOST`.
+
+2. **CLI installation and login.**
+
+   ```bash
+   pip install -U truefoundry
+   tfy login --host "$TFY_HOST" --api-key "$TFY_API_KEY"
+   ```
+
+3. **Provider integrations.** In the console, navigate to **AI Gateway →
+   Model Integrations → New** and add the following five integrations:
+
+   | Integration name | Provider | Model | Notes |
+   | --- | --- | --- | --- |
+   | `openai` | OpenAI | `gpt-4o-mini` | valid API key |
+   | `anthropic` | Anthropic | `claude-sonnet-4-6` | valid API key |
+   | `google-gemini` | Google AI Studio | `gemini-2.5-flash-lite` | valid API key |
+   | `openai-broken` | OpenAI | `gpt-4o` | intentionally invalid key (e.g. `sk-broken-on-purpose`) |
+   | `anthropic-broken` | Anthropic | `claude-sonnet-4-6` | intentionally invalid key |
+
+4. **Virtual Models.** Apply the four manifests:
+
+   ```bash
+   tfy apply \
+     -f gateway-config/resilient_chat.yaml \
+     -f gateway-config/chaos_openai_down.yaml \
+     -f gateway-config/chaos_anthropic_down.yaml \
+     -f gateway-config/chaos_cascade.yaml
+   ```
+
+5. **Verify.** Run `unsinkable doctor` for a table view, or
+   `python examples/smoke_test.py` for a scripted end-to-end check that
+   exercises a direct provider call, the happy-path Virtual Model, and a
+   chaos-triggered fallback.
+
+---
 
 ## Architecture
 
 ```
-┌─────────────────┐    ┌──────────────────────┐    ┌────────────────────┐
-│ Your agent code │    │ unsinkable.OpenAI    │    │ TrueFoundry        │
-│ from unsinkable │───▶│ shim (SDK subclass)  │───▶│ AI Gateway         │
-│ import OpenAI   │    │ + instrumented httpx │    │ • Virtual Models   │
-└─────────────────┘    │   transport          │    │ • Priority routing │
-        │              └──────────────────────┘    │ • Real fallback    │
-        │                       │                  └────────────────────┘
-        │                       │                            │
-        ▼                       ▼                            ▼
-┌─────────────────┐    ┌────────────────────┐       ┌────────────────────┐
-│ ResilientMcpCli │    │ Live Dashboard     │       │ OpenAI / Anthropic │
-│ • primary       │    │ FastAPI + SSE      │       │ / Google Gemini    │
-│ • secondary     │    │ + chaos buttons    │       │ providers          │
-└─────────────────┘    └────────────────────┘       └────────────────────┘
+                ┌────────────────────────────────────────────────────────┐
+                │                       Your code                        │
+                │    from unsinkable import OpenAI, AsyncOpenAI          │
+                └──────────────────────┬─────────────────────────────────┘
+                                       │
+            ┌──────────────────────────┴──────────────────────────┐
+            ▼                                                     ▼
+  ┌──────────────────────┐                          ┌──────────────────────┐
+  │  unsinkable.OpenAI   │                          │ ResilientMcpClient   │
+  │  • base_url, auth    │                          │  • priority backends │
+  │  • httpx transport   │                          │  • chaos-aware       │
+  │    instrumentation   │                          │  • per-call failover │
+  │  • body rewriting    │                          └──────────┬───────────┘
+  │    via chaos rules   │                                     │
+  └──────────┬───────────┘                                     │
+             │                                                 ▼
+             │                                       ┌───────────────────┐
+             ▼                                       │   MCP servers     │
+  ┌──────────────────────┐                           │   (stdio)         │
+  │ TrueFoundry          │                           └───────────────────┘
+  │ AI Gateway           │
+  │  • Virtual Models    │
+  │  • Priority routing  │
+  │  • Fallback codes    │
+  └──────────┬───────────┘
+             │
+             ▼
+  ┌────────────────────────────────────────┐
+  │ OpenAI · Anthropic · Google Gemini …   │
+  └────────────────────────────────────────┘
 ```
 
-## TrueFoundry setup (~10 min, mostly `tfy apply`)
+Request events emitted by the transport are also POSTed to the optional local
+dashboard for live observability.
 
-1. **Tenant + token** — at `https://<tenant>.truefoundry.cloud` go to **Access → Personal Access Tokens** and create one. Copy `.env.example` to `.env` and fill in `TFY_API_KEY` + `TFY_HOST`.
-2. **Install + log in to the CLI**:
-   ```
-   pip install -U truefoundry
-   tfy login --host $TFY_HOST --api-key $TFY_API_KEY
-   ```
-3. **Provider integrations (UI, ~5 min)** — **AI Gateway → Model Integrations → New** and add **5** integrations:
-   - `openai` (real key) with `gpt-4o-mini`
-   - `anthropic` (real key) with `claude-sonnet-4-6`
-   - `google-gemini` (real key) with `gemini-2.5-flash-lite`
-   - `openai-broken` (bogus key e.g. `sk-broken-on-purpose`) with `gpt-4o`
-   - `anthropic-broken` (bogus key) with `claude-sonnet-4-6`
-4. **Virtual Models (CLI, ~10 s)**:
-   ```
-   tfy apply -f gateway-config/resilient_chat.yaml \
-             -f gateway-config/chaos_openai_down.yaml \
-             -f gateway-config/chaos_anthropic_down.yaml \
-             -f gateway-config/chaos_cascade.yaml
-   ```
-5. **Verify**: `python examples/smoke_test.py` — should print "all checks passed", or run `unsinkable doctor` for the table view.
+---
 
-## A note on MCP resilience
-
-TrueFoundry's gateway has a **Virtual MCP Server** feature that does for tools what Virtual Models do for LLMs. We chose to ship the same pattern *client-side* in this hackathon scope — `unsinkable.mcp.ResilientMcpClient` wraps two local FastMCP servers and fails over between them, consulting the same chaos engine the LLM shim uses. That keeps the demo self-contained (no public MCP servers to deploy) while telling the identical resilience story. Migrating to TF's Virtual MCP is a config change, not a rewrite.
-
-## Run the tests
+## Development
 
 ```bash
-git clone https://github.com/0xNoramiya/unsinkable-ship
+git clone https://github.com/0xNoramiya/unsinkable-ship.git
 cd unsinkable-ship
-python -m venv .venv && .venv/bin/pip install -e ".[dev]"
+python -m venv .venv
+.venv/bin/pip install -e ".[dev]"
 .venv/bin/pytest -q
 ```
 
-11 tests cover config, chaos engine state, and live MCP failover against the two local servers.
+The test suite (11 tests) covers configuration loading, the chaos-state
+lifecycle, and live MCP failover against two locally spawned stdio servers.
+
+---
+
+## Project Layout
+
+```
+unsinkable-ship/
+├── src/unsinkable/             # Python package
+│   ├── client.py               # OpenAI / AsyncOpenAI shim + httpx transport
+│   ├── chaos.py                # State persistence and scenario activation
+│   ├── mcp.py                  # ResilientMcpClient
+│   ├── dashboard.py            # FastAPI + SSE dashboard
+│   ├── auto_demo.py            # Scripted demo runner
+│   ├── cli.py                  # Click entry point: doctor / dashboard / demo / chaos
+│   ├── config.py               # pydantic-settings configuration
+│   └── events.py               # RequestEvent dataclass and HTTP sink
+├── examples/                   # Sample agent and MCP servers
+├── gateway-config/             # TrueFoundry Virtual Model manifests
+├── tests/                      # pytest suite (config + chaos + MCP)
+├── web-demo/                   # Static client-side dashboard mirror (Vercel)
+└── video/trailer/              # HyperFrames composition for the project trailer
+```
+
+---
+
+## Acknowledgments
+
+Built for the **DevNetwork [AI + ML] Hackathon 2025**, TrueFoundry "Resilient
+Agents" track. Powered by [TrueFoundry's AI Gateway](https://www.truefoundry.com/docs/ai-gateway/intro-to-llm-gateway),
+the [OpenAI Python SDK](https://github.com/openai/openai-python), and the
+[Model Context Protocol](https://modelcontextprotocol.io/).
+
+---
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+Released under the [MIT License](LICENSE).
